@@ -638,8 +638,8 @@ var HOUSEHOLD_PHONE_SYNC_MINUTE = 0;      // Runs at :00 minutes past the hour
 // ============================================================
 
 var SYSTEM_NAME             = "GEA Management System";
-var SYSTEM_VERSION          = "1.15.0";
-var SYSTEM_BUILD_DATE       = "2026-02-15";
+var SYSTEM_VERSION          = "1.23.0";
+var SYSTEM_BUILD_DATE       = "2026-02-16";
 var SYSTEM_DEVELOPER        = "Michael Raney, GEA Treasurer";
 var SYSTEM_CONTACT          = "treasurer@geabotswana.org";
 
