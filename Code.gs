@@ -1,1004 +1,651 @@
 /**
  * ============================================================
- * CODE.GS
+ * GEA MEMBER PORTAL - CONFIGURATION FILE
  * ============================================================
- * Web app entry point. All requests to the deployed Apps Script
- * URL come here first. doGet() reads the "action" parameter
- * and routes to the appropriate handler function.
  *
- * HOW THE WEB APP WORKS:
- *   1. Google Sites embeds the deployed Apps Script URL in an iframe
- *   2. The browser makes GET requests to this URL with parameters
- *      Example: ?action=login&email=jane@state.gov
- *   3. doGet() parses the parameters and calls the right handler
- *   4. The handler returns a JSON response via ContentService
- *   5. The browser JavaScript reads the JSON and updates the UI
- *
- * PUBLIC ROUTES (no token required):
- *   action=login          — Submit email to log in
- *   action=logout         — Invalidate session
- *   action=serve          — Return the HTML shell for the portal
- *
- * MEMBER ROUTES (valid token required):
- *   action=dashboard      — Member's home screen data
- *   action=profile        — View/edit profile
- *   action=reservations   — List member's reservations
- *   action=book           — Create a new reservation
- *   action=cancel         — Cancel a reservation
- *   action=card           — Digital membership card data
- *   action=payment        — Submit payment confirmation
- *
- * BOARD ROUTES (board role required):
- *   action=admin_pending     — List pending reservations
- *   action=admin_approve     — Approve a reservation
- *   action=admin_deny        — Deny a reservation
- *   action=admin_members     — List all members
- *   action=admin_photo       — Approve/reject photo
- *   action=admin_payment     — Verify a payment
- * ============================================================
- */
-
-
-/**
- * Web app entry point. Every HTTP request arrives here.
- * Returns JSON responses for API calls, or HTML for the portal shell.
- *
- * @param {Object} e  The event object from Apps Script (e.parameter)
- * @returns {ContentService.TextOutput}
- */
-function doGet(e) {
-  var params = e.parameter || {};
-  var action = params.action || "serve";
-
-  // Serve the HTML portal shell (no auth needed)
-  if (action === "serve") {
-    return HtmlService.createHtmlOutputFromFile("Portal")
-      .setTitle("GEA Member Portal")
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-  }
-
-  // Serve the Admin interface to board members
-  // auth happens inside Admin.html via the login form and token-based API calls)
-  if (action === "serve_admin") {
-    return HtmlService.createHtmlOutputFromFile("Admin")
-      .setTitle("GEA Admin Portal")
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-  }
-
-  // All other actions return JSON
-  var result;
-  try {
-    result = _routeAction(action, params);
-  } catch (err) {
-    Logger.log("UNCAUGHT ERROR in doGet (action=" + action + "): " + err);
-    // Return the actual error message in the response
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: false,
-        message: err.toString(),
-        code: "DEBUG_ERROR"
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-
-  return ContentService
-    .createTextOutput(result)
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-
-/**
- * Routes an action to its handler function.
- * @param {string} action
- * @param {Object} params
- * @returns {string} JSON response string
- */
-function _routeAction(action, params) {
-  switch (action) {
-
-    // ── PUBLIC ──────────────────────────────────────────────
-    case "login":  return _handleLogin(params);
-    case "logout": return _handleLogout(params);
-
-
-    // ── MEMBER ──────────────────────────────────────────────
-    case "dashboard":    return _handleDashboard(params);
-    case "profile":      return _handleProfile(params);
-    case "reservations": return _handleReservations(params);
-    case "book":         return _handleBook(params);
-    case "cancel":       return _handleCancel(params);
-    case "card":         return _handleCard(params);
-    case "payment":      return _handlePaymentSubmit(params);
-    case "updatePhoneNumbers": return _handleUpdatePhoneNumbers(params);
-
-    // ── BOARD / ADMIN ────────────────────────────────────────
-    case "admin_pending": return _handleAdminPending(params);
-    case "admin_approve": return _handleAdminApprove(params);
-    case "admin_deny":    return _handleAdminDeny(params);
-    case "admin_members": return _handleAdminMembers(params);
-    case "admin_photo":   return _handleAdminPhoto(params);
-    case "admin_payment": return _handleAdminPayment(params);
-
-
-    default:
-      return errorResponse("Unknown action: " + action, "NOT_FOUND");
-  }
-}
-
-
-// ============================================================
-// PUBLIC HANDLERS
-// ============================================================
-
-/**
- * TEMPORARY SETUP FUNCTION - Remove after initial member activation
- * Sets initial passwords for test members.
- * In production, passwords are set during member activation by the board
- * via the Admin Portal's activation workflow.
- */
-function _setupTestPasswords() {
-  // Password for jane@state.gov
-  setPassword("IND-2026-TEST01", "JanePassword2026!", "system");
-  
-  // Password for john@state.gov  
-  setPassword("IND-2026-TEST02", "JohnPassword2026!", "system");
-  
-  // Password for treasurer
-  setPassword("[TREASURER_INDIVIDUAL_ID]", "TreasurerPassword2026!", "system");
-  
-  Logger.log("Test passwords set. Remove this function after verification.");
-}
-
-
-/**
- * HANDLER: _handleLogin
- * PURPOSE: Processes login requests from the Member Portal.
- *          Accepts email and password, delegates to AuthService.login()
- *          for verification, and returns a session token on success.
- *
- * CALLED BY: doGet() when action=login
- *
- * REQUIRED PARAMETERS:
- * - email: Member's email address
- * - password: Member's password (plaintext, sent over HTTPS)
- *
- * RETURNS:
- * - On success: { success: true, data: { token, role, member } }
- * - On failure: { success: false, message: "Error message" }
- */
-function _handleLogin(p) {
-  // Validate required parameters
-  if (!p.email) {
-    return errorResponse("Email is required.", "MISSING_PARAM");
-  }
-  if (!p.password) {
-    return errorResponse("Password is required.", "MISSING_PARAM");
-  }
-
-  // Call the login function with both email and password
-  var result = login(p.email, p.password);
-  
-  if (!result.success) {
-    return errorResponse(result.message, "AUTH_FAILED");
-  }
-  
-  // Return success with token and member data
-  return successResponse({ 
-    token: result.token, 
-    role: result.role, 
-    member: result.member 
-  });
-}
-
-function _handleLogout(p) {
-  logout(p.token || "");
-  return successResponse({}, "Logged out successfully.");
-}
-
-
-// ============================================================
-// MEMBER HANDLERS
-// ============================================================
-
-function _handleDashboard(p) {
-  var auth = requireAuth(p.token);
-  if (!auth.ok) return auth.response;
-
-  var member = getMemberByEmail(auth.session.email);
-  if (!member) return errorResponse(ERR_NOT_MEMBER, "NOT_FOUND");
-
-  var hh          = getHouseholdById(member.household_id);
-  var hhMembers   = getHouseholdMembers(member.household_id);
-  var level       = hh ? getMembershipLevel(hh.membership_level_id) : null;
-  var upcomingRes = _getMemberUpcomingReservations(member.household_id);
-
-  return successResponse({
-    member:        _safePublicMember(member),
-    household:     _safePublicHousehold(hh),
-    members:       hhMembers.map(_safePublicMember),
-    level:         level,
-    reservations:  upcomingRes,
-    photoRequired: hhMembers.some(function(m) {
-                     return m.photo_status !== PHOTO_STATUS_APPROVED &&
-                            m.relationship_to_primary !== RELATIONSHIP_STAFF;
-                   })
-  });
-}
-
-function _handleProfile(p) {
-  var auth = requireAuth(p.token);
-  if (!auth.ok) return auth.response;
-
-  var member = getMemberByEmail(auth.session.email);
-  if (!member) return errorResponse(ERR_NOT_MEMBER, "NOT_FOUND");
-
-  // If method=update, apply changes
-  if (p.method === "update") {
-    var allowed = ["phone", "emergency_contact_name", "emergency_contact_phone",
-                   "emergency_contact_email"];
-    for (var i = 0; i < allowed.length; i++) {
-      var field = allowed[i];
-      if (p[field] !== undefined) {
-        updateMemberField(member.individual_id, field, sanitizeInput(p[field]),
-                          auth.session.email);
-      }
-    }
-    member = getMemberByEmail(auth.session.email); // re-fetch
-  }
-
-  var hh = getHouseholdById(member.household_id);
-  return successResponse({
-    member:    _safePublicMember(member),
-    household: _safePublicHousehold(hh)
-  });
-}
-
-function _handleReservations(p) {
-  var auth = requireAuth(p.token);
-  if (!auth.ok) return auth.response;
-
-  var member = getMemberByEmail(auth.session.email);
-  if (!member) return errorResponse(ERR_NOT_MEMBER, "NOT_FOUND");
-
-  var reservations = _getMemberAllReservations(member.household_id);
-  return successResponse({ reservations: reservations });
-}
-
-function _handleBook(p) {
-  var auth = requireAuth(p.token);
-  if (!auth.ok) return auth.response;
-
-  // Validate required parameters
-  var required = ["facility", "event_date", "start_time", "end_time",
-                  "duration_hours", "event_name"];
-  for (var i = 0; i < required.length; i++) {
-    if (!p[required[i]]) {
-      return errorResponse("Missing required field: " + required[i], "MISSING_PARAM");
-    }
-  }
-
-  var member = getMemberByEmail(auth.session.email);
-  if (!member) return errorResponse(ERR_NOT_MEMBER, "NOT_FOUND");
-
-  // Staff members cannot make reservations
-  if (member.relationship_to_primary === RELATIONSHIP_STAFF) {
-    return errorResponse(ERR_STAFF_RESERVATION, "FORBIDDEN");
-  }
-
-  var facility = p.facility;
-  var eventDate = new Date(p.event_date);
-
-  // Validate facility name
-  if (ALL_FACILITIES.indexOf(facility) === -1) {
-    return errorResponse("Invalid facility name.", "INVALID_PARAM");
-  }
-
-  // Validate event is in the future
-  if (eventDate < new Date()) {
-    return errorResponse("Reservation date must be in the future.", "INVALID_PARAM");
-  }
-
-  var result = createReservation({
-    householdId:             member.household_id,
-    primaryEmail:            auth.session.email,
-    facility:                facility,
-    eventDate:               eventDate,
-    startTime:               new Date(p.start_time),
-    endTime:                 new Date(p.end_time),
-    durationHours:           parseFloat(p.duration_hours),
-    eventName:               p.event_name,
-    hasGuests:               p.has_guests === "true",
-    guestCount:              parseInt(p.guest_count) || 0,
-    noFundraisingConfirmed:  p.no_fundraising === "true"
-  });
-
-  if (!result.success) return errorResponse(result.message, "BOOKING_FAILED");
-  return successResponse({
-    reservationId: result.reservationId,
-    status:        result.status
-  }, result.message);
-}
-
-/**
- * HANDLER: _handleUpdatePhoneNumbers
- * PURPOSE: Processes phone number updates from the member portal.
- *          Receives country_code + phone_number + whatsapp flag for primary/secondary.
- *          Validates data, stores to Individuals sheet, logs audit entry.
- *
- * CALLED BY: Portal.html when member clicks "Save Phone Numbers"
- *
- * REQUIRED PARAMETERS (via POST):
- * - country_code_primary: ISO country code (BW, US, GB)
- * - phone_primary: Numeric phone (no +, spaces, or dashes)
- * - phone_primary_whatsapp: Boolean
- * - country_code_secondary: (optional)
- * - phone_secondary: (optional)
- * - phone_secondary_whatsapp: (optional)
- *
- * RETURNS:
- * - On success: { success: true, data: { updated_fields: [...] } }
- * - On failure: { success: false, message: "Error message" }
- */
-function _handleUpdatePhoneNumbers(p) {
-  // Verify user is authenticated
-  var auth = requireAuth(p.token);
-  if (!auth.ok) return auth.response;
-  
-  // Validate primary phone is provided
-  if (!p.country_code_primary || !p.phone_primary) {
-    return errorResponse("Primary phone is required.", "MISSING_PARAM");
-  }
-  
-  // Get the member from auth
-  var member = getMemberByEmail(auth.session.email);
-  if (!member) {
-    return errorResponse("Member not found.", "NOT_FOUND");
-  }
-  
-  // Validate phone numbers using utility function
-  if (!isValidPhoneNumber(p.country_code_primary, p.phone_primary)) {
-    return errorResponse("Primary phone format is invalid.", "INVALID_PHONE");
-  }
-  
-  if (p.phone_secondary && 
-      !isValidPhoneNumber(p.country_code_secondary, p.phone_secondary)) {
-    return errorResponse("Secondary phone format is invalid.", "INVALID_PHONE");
-  }
-  
-  try {
-    // Update primary phone fields
-    updateMemberField(member.individual_id, "country_code_primary", 
-                     p.country_code_primary, auth.session.email);
-    updateMemberField(member.individual_id, "phone_primary", 
-                     p.phone_primary, auth.session.email);
-    updateMemberField(member.individual_id, "phone_primary_whatsapp", 
-                     p.phone_primary_whatsapp === "true" || p.phone_primary_whatsapp === true,
-                     auth.session.email);
-    
-    // Update secondary phone fields if provided
-    if (p.phone_secondary) {
-      updateMemberField(member.individual_id, "country_code_secondary", 
-                       p.country_code_secondary, auth.session.email);
-      updateMemberField(member.individual_id, "phone_secondary", 
-                       p.phone_secondary, auth.session.email);
-      updateMemberField(member.individual_id, "phone_secondary_whatsapp", 
-                       p.phone_secondary_whatsapp === "true" || p.phone_secondary_whatsapp === true,
-                       auth.session.email);
-    }
-    
-    // Log the update
-    var formattedPhone = formatPhoneNumber(p.country_code_primary, p.phone_primary);
-    logAuditEntry(auth.session.email, AUDIT_MEMBER_UPDATED, "Individual", 
-                 member.individual_id,
-                 "Updated phone numbers: " + formattedPhone + 
-                 (p.phone_secondary ? " / " + formatPhoneNumber(p.country_code_secondary, 
-                                                                 p.phone_secondary) : ""));
-    
-    return successResponse({ 
-      updated_fields: ["country_code_primary", "phone_primary", "phone_primary_whatsapp",
-                       "country_code_secondary", "phone_secondary", "phone_secondary_whatsapp"]
-    }, "Phone numbers updated successfully.");
-    
-  } catch (e) {
-    Logger.log("ERROR _handleUpdatePhoneNumbers: " + e);
-    return errorResponse("Failed to update phone numbers.", "SERVER_ERROR");
-  }
-}
-
-function _handleCancel(p) {
-  var auth = requireAuth(p.token);
-  if (!auth.ok) return auth.response;
-  if (!p.reservation_id) return errorResponse("reservation_id required.", "MISSING_PARAM");
-
-  // Verify the reservation belongs to this member's household
-  var member = getMemberByEmail(auth.session.email);
-  var res    = getReservationById(p.reservation_id);
-  if (!res || res.household_id !== member.household_id) {
-    return errorResponse(ERR_NOT_AUTHORIZED, "FORBIDDEN");
-  }
-
-  var ok = cancelReservation(p.reservation_id, auth.session.email, p.reason || "");
-  return ok
-    ? successResponse({}, "Reservation cancelled.")
-    : errorResponse("Could not cancel reservation.", "CANCEL_FAILED");
-}
-
-function _handleCard(p) {
-  var auth = requireAuth(p.token);
-  if (!auth.ok) return auth.response;
-
-  var member = getMemberByEmail(auth.session.email);
-  if (!member) return errorResponse(ERR_NOT_MEMBER, "NOT_FOUND");
-
-  var hh      = getHouseholdById(member.household_id);
-  var members = getHouseholdMembers(member.household_id);
-  var level   = hh ? getMembershipLevel(hh.membership_level_id) : null;
-
-  // Build card data for every active member in the household
-  var cards = members.map(function(m) {
-    return {
-      individual_id:      m.individual_id,
-      name:               m.first_name + " " + m.last_name,
-      relationship:       m.relationship_to_primary,
-      membership_type:    hh ? hh.membership_type : "",
-      household_type:     hh ? hh.household_type : "",
-      expiration_date:    hh ? formatDate(new Date(hh.membership_expiration_date)) : "",
-      photo_status:       m.photo_status,
-      photo_url:          m.photo_approved_url || "",
-      can_access_unaccompanied: m.can_access_unaccompanied,
-      fitness_eligible:   m.fitness_center_eligible,
-      voting_eligible:    m.voting_eligible,
-      status:             hh && hh.active ? "ACTIVE" : "INACTIVE"
-    };
-  });
-
-  return successResponse({ cards: cards });
-}
-
-function _handlePaymentSubmit(p) {
-  var auth = requireAuth(p.token);
-  if (!auth.ok) return auth.response;
-
-  var required = ["payment_method", "payment_reference", "payment_date", "amount_usd"];
-  for (var i = 0; i < required.length; i++) {
-    if (!p[required[i]]) return errorResponse("Missing: " + required[i], "MISSING_PARAM");
-  }
-
-  var member = getMemberByEmail(auth.session.email);
-  var hh     = getHouseholdById(member.household_id);
-  if (!member || !hh) return errorResponse(ERR_NOT_MEMBER, "NOT_FOUND");
-
-  var paymentId = generateId("PAY");
-  var now       = new Date();
-
-  try {
-    var sheet   = SpreadsheetApp.openById(PAYMENT_TRACKING_ID).getSheetByName(TAB_PAYMENTS);
-    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    var row     = {
-      payment_id:                paymentId,
-      household_id:              member.household_id,
-      household_name:            hh.household_name,
-      primary_email:             auth.session.email,
-      payment_method:            sanitizeInput(p.payment_method),
-      payment_reference:         sanitizeInput(p.payment_reference),
-      payment_date:              new Date(p.payment_date),
-      amount_usd:                parseFloat(p.amount_usd),
-      amount_bwp:                parseFloat(p.amount_bwp) || 0,
-      currency:                  p.currency || "USD",
-      status:                    "Pending Verification",
-      payment_submitted_date:    now,
-      notes:                     sanitizeInput(p.notes || "")
-    };
-    sheet.appendRow(headers.map(function(col) {
-      return row[col] !== undefined ? row[col] : "";
-    }));
-  } catch (err) {
-    Logger.log("ERROR _handlePaymentSubmit (write): " + err);
-    return errorResponse("Failed to save payment. Please try again.", "SAVE_FAILED");
-  }
-
-  // Notify the board
-  var level = getMembershipLevel(hh.membership_level_id);
-  sendEmail("tpl_025", EMAIL_BOARD, {
-    MEMBER_NAME:      hh.household_name,
-    MEMBER_EMAIL:     auth.session.email,
-    MEMBERSHIP_LEVEL: hh.membership_type,
-    DUES_USD:         level ? level.annual_dues_usd : p.amount_usd,
-    DUES_BWP:         level ? level.annual_dues_bwp : p.amount_bwp || "",
-    PAYMENT_METHOD:   p.payment_method,
-    PAYMENT_REFERENCE: p.payment_reference,
-    PAYMENT_DATE:     formatDate(new Date(p.payment_date)),
-    IF_NOTES:         p.notes ? "true" : "",
-    PAYMENT_NOTES:    p.notes || "",
-    CONFIRM_LINK:     URL_ADMIN_PORTAL + "?action=admin_payment&method=confirm&id=" + paymentId,
-    NOT_FOUND_LINK:   URL_ADMIN_PORTAL + "?action=admin_payment&method=notfound&id=" + paymentId
-  });
-
-  logAuditEntry(auth.session.email, AUDIT_PAYMENT_SUBMITTED, "Payment", paymentId,
-                p.payment_method + " " + p.payment_reference);
-
-  return successResponse({ paymentId: paymentId },
-                         "Payment confirmation submitted. The board will verify and activate your membership.");
-}
-
-
-// ============================================================
-// BOARD / ADMIN HANDLERS
-// ============================================================
-
-/**
- * ============================================================
- * HANDLER: _handleAdminPending
- * ============================================================
  * PURPOSE:
- * Returns all pending reservations awaiting board approval.
- * Used by the Admin dashboard to populate the Pending Reservations page.
+ * This file contains ALL settings, IDs, and constants that
+ * the GEA system needs to function. If you need to update a
+ * spreadsheet ID, change a business rule, or modify system
+ * behavior, this is the ONLY file you should need to edit
+ * for most changes.
  *
- * AUTHENTICATION:
- * Requires board role. Rejects members and MGT users.
+ * HOW TO FIND SPREADSHEET IDs:
+ * Open the spreadsheet in Google Drive. Look at the URL:
+ * https://docs.google.com/spreadsheets/d/[ID IS HERE]/edit
+ * Copy the long string between /d/ and /edit
  *
- * RESPONSE FORMAT:
- * {
- *   "success": true,
- *   "data": {
- *     "reservations": [
- *       {
- *         "reservation_id": "RES-2026-001",
- *         "event_date": "2026-02-14",
- *         "facility": "Tennis Courts",
- *         "member_name": "John Smith",
- *         "email": "john@state.gov",
- *         "guest_count": 2,
- *         "status": "STATUS_PENDING"
- *       }
- *     ]
- *   }
- * }
+ * HOW TO FIND FOLDER IDs:
+ * Open the folder in Google Drive. Look at the URL:
+ * https://drive.google.com/drive/folders/[ID IS HERE]
+ * Copy the string after /folders/
+ *
+ * IMPORTANT: After editing this file, click the save icon
+ * (or Ctrl+S / Cmd+S) before running any functions.
+ *
+ * SYSTEM: Gaborone Employee Association Management System
+ * WEBSITE: www.geabotswana.org
+ * LAST UPDATED: February 2026
+ * UPDATED BY: Michael Raney, Treasurer
  * ============================================================
  */
-function _handleAdminPending(p) {
-  // Step 1: Verify caller is a board member
-  var auth = requireAuth(p.token, "board");
-  if (!auth.ok) return auth.response;
-
-  try {
-    // Step 2: Read all reservations from the Reservations sheet
-    var sheet = SpreadsheetApp.openById(RESERVATIONS_ID).getSheetByName(TAB_RESERVATIONS);
-    var data    = sheet.getDataRange().getValues();
-    var headers = data[0];
-    var pending = [];
-
-    // Step 3: Filter for STATUS_PENDING only
-    for (var i = 1; i < data.length; i++) {
-      var res = rowToObject(headers, data[i]);
-      if (res.status === STATUS_PENDING) {
-        pending.push(res);
-      }
-    }
-
-    // Step 4: Return the filtered list
-    return successResponse({
-      reservations: pending,
-      count: pending.length
-    });
-  } catch (e) {
-    Logger.log("ERROR _handleAdminPending: " + e);
-    return errorResponse("Could not load pending reservations.", "READ_FAILED");
-  }
-}
-
-
-/**
- * ============================================================
- * HANDLER: _handleAdminApprove
- * ============================================================
- * PURPOSE:
- * Approves a pending reservation after board review.
- * Changes status from STATUS_PENDING to STATUS_CONFIRMED.
- * Sends a confirmation email to the member.
- *
- * AUTHENTICATION:
- * Requires board role (can approve tennis or leobo).
- * MGT users can only approve Leobo reservations (checked in approveReservation()).
- *
- * PARAMETERS REQUIRED:
- *   token: session token
- *   reservation_id: the reservation to approve
- *   notes: (optional) internal notes about the approval
- *
- * RESPONSE:
- * { "success": true, "data": {}, "message": "Reservation approved." }
- * ============================================================
- */
-function _handleAdminApprove(p) {
-  // Step 1: Verify caller is authenticated and has board or MGT role
-  var auth = requireAuth(p.token);
-  if (!auth.ok) return auth.response;
-
-  // Step 2: Only board or MGT can approve; others are forbidden
-  if (auth.session.role !== "board" && auth.session.role !== "mgt") {
-    return errorResponse(ERR_NOT_AUTHORIZED, "FORBIDDEN");
-  }
-
-  // Step 3: Check that reservation_id parameter was provided
-  if (!p.reservation_id) {
-    return errorResponse("reservation_id is required.", "MISSING_PARAM");
-  }
-
-  // Step 4: Call ReservationService to approve the reservation
-  // This handles all the business logic: status update, email, audit log
-  var ok = approveReservation(p.reservation_id, auth.session.email, p.notes || "");
-
-  if (!ok) {
-    return errorResponse("Could not approve reservation.", "APPROVE_FAILED");
-  }
-
-  return successResponse({}, "Reservation approved.");
-}
-
-
-/**
- * ============================================================
- * HANDLER: _handleAdminDeny
- * ============================================================
- * PURPOSE:
- * Denies a pending reservation with an optional reason.
- * Changes status to STATUS_CANCELLED.
- * Sends a denial email to the member with the reason if provided.
- *
- * AUTHENTICATION:
- * Requires board role.
- *
- * PARAMETERS REQUIRED:
- *   token: session token
- *   reservation_id: the reservation to deny
- *   reason: (optional) reason for denial, shown to member
- *
- * RESPONSE:
- * { "success": true, "data": {}, "message": "Reservation denied." }
- * ============================================================
- */
-function _handleAdminDeny(p) {
-  // Step 1: Verify caller is a board member
-  var auth = requireAuth(p.token, "board");
-  if (!auth.ok) return auth.response;
-
-  // Step 2: Check that reservation_id parameter was provided
-  if (!p.reservation_id) {
-    return errorResponse("reservation_id is required.", "MISSING_PARAM");
-  }
-
-  // Step 3: Call ReservationService to deny the reservation
-  // This handles: status update, email with reason, audit log
-  var ok = denyReservation(p.reservation_id, auth.session.email, p.reason || "");
-
-  if (!ok) {
-    return errorResponse("Could not deny reservation.", "DENY_FAILED");
-  }
-
-  return successResponse({}, "Reservation denied.");
-}
-
-
-/**
- * ============================================================
- * HANDLER: _handleAdminMembers
- * ============================================================
- * PURPOSE:
- * Returns all member households in a list the board can search and filter.
- * Each household includes: name, type, status, expiration date, email.
- *
- * AUTHENTICATION:
- * Requires board role.
- *
- * RESPONSE FORMAT:
- * {
- *   "success": true,
- *   "data": {
- *     "households": [
- *       {
- *         "household_id": "HH-2026-001",
- *         "household_name": "Smith Family",
- *         "membership_type": "ACTIVE",
- *         "status": "Approved",
- *         "membership_expiration_date": "Dec 31, 2026",
- *         "email": "john@state.gov"
- *       }
- *     ],
- *     "count": 47
- *   }
- * }
- * ============================================================
- */
-function _handleAdminMembers(p) {
-  // Step 1: Verify caller is a board member
-  var auth = requireAuth(p.token, "board");
-  if (!auth.ok) return auth.response;
-
-  try {
-    // Step 2: Read all households from the Households sheet
-    var sheet = SpreadsheetApp.openById(MEMBER_DIRECTORY_ID).getSheetByName(TAB_HOUSEHOLDS);
-    var data    = sheet.getDataRange().getValues();
-    var headers = data[0];
-    var households = [];
-
-    // Step 3: Convert each row to a safe public object and collect
-    for (var i = 1; i < data.length; i++) {
-      var hh = rowToObject(headers, data[i]);
-      // Skip rows with no household_id (empty rows)
-      if (!hh.household_id) continue;
-      // Add only safe fields to the response
-      households.push(_safePublicHousehold(hh));
-    }
-
-    // Step 4: Return the list with count
-    return successResponse({
-      households: households,
-      count: households.length
-    });
-  } catch (e) {
-    Logger.log("ERROR _handleAdminMembers: " + e);
-    return errorResponse("Could not load members.", "READ_FAILED");
-  }
-}
-
-
-/**
- * ============================================================
- * HANDLER: _handleAdminPhoto
- * ============================================================
- * PURPOSE:
- * Approves or rejects a pending member photo submission.
- * Updates the individual member's photo_status field.
- * Sends email notification to the member.
- *
- * AUTHENTICATION:
- * Requires board role.
- *
- * PARAMETERS REQUIRED:
- *   token: session token
- *   individual_id: the member whose photo to review
- *   decision: "approved" or "rejected"
- *   reason: (optional) reason for rejection, shown to member if rejected
- *
- * RESPONSE:
- * { "success": true, "data": {}, "message": "Photo approved." }
- * ============================================================
- */
-function _handleAdminPhoto(p) {
-  // Step 1: Verify caller is a board member
-  var auth = requireAuth(p.token, "board");
-  if (!auth.ok) return auth.response;
-
-  // Step 2: Check required parameters
-  if (!p.individual_id) {
-    return errorResponse("individual_id is required.", "MISSING_PARAM");
-  }
-  if (!p.decision) {
-    return errorResponse("decision is required (approved or rejected).", "MISSING_PARAM");
-  }
-
-  // Step 3: Validate decision is one of the allowed values
-  if (p.decision !== "approved" && p.decision !== "rejected") {
-    return errorResponse("decision must be 'approved' or 'rejected'.", "INVALID_PARAM");
-  }
-
-  // Step 4: Call MemberService to update photo status
-  // This handles: status update, email notification, audit log
-  var ok = updatePhotoStatus(p.individual_id, p.decision,
-                             auth.session.email, p.reason || "");
-
-  if (!ok) {
-    return errorResponse("Could not update photo status.", "UPDATE_FAILED");
-  }
-
-  return successResponse({}, "Photo " + p.decision + ".");
-}
-
-
-/**
- * ============================================================
- * HANDLER: _handleAdminPayment
- * ============================================================
- * PURPOSE:
- * Processes payment verification actions: confirm or mark-not-found.
- * Delegates to _confirmPayment() or _markPaymentNotFound().
- *
- * AUTHENTICATION:
- * Requires board role.
- *
- * PARAMETERS REQUIRED:
- *   token: session token
- *   payment_id: the payment to process
- *   action: "confirm" or "not_found"
- *
- * RESPONSE:
- * { "success": true, "data": {}, "message": "Payment confirmed and membership activated." }
- * ============================================================
- */
-function _handleAdminPayment(p) {
-  // Step 1: Verify caller is a board member
-  var auth = requireAuth(p.token, "board");
-  if (!auth.ok) return auth.response;
-
-  // Step 2: Check required parameters
-  if (!p.payment_id) {
-    return errorResponse("payment_id is required.", "MISSING_PARAM");
-  }
-  if (!p.action) {
-    return errorResponse("action is required (confirm or not_found).", "MISSING_PARAM");
-  }
-
-  // Step 3: Route to the appropriate payment processing function
-  if (p.action === "confirm") {
-    return _confirmPayment(p.payment_id, auth.session.email);
-  }
-  if (p.action === "not_found") {
-    return _markPaymentNotFound(p.payment_id, auth.session.email);
-  }
-
-  // Unknown action
-  return errorResponse("action must be 'confirm' or 'not_found'.", "INVALID_PARAM");
-}
 
 
 // ============================================================
-// PAYMENT VERIFICATION
+// SECTION 1: SPREADSHEET IDs
+// ============================================================
+// These are the unique identifiers for each Google Sheets
+// document that the system uses to store data.
+// To find: Open spreadsheet → look at URL between /d/ and /edit
 // ============================================================
 
-function _confirmPayment(paymentId, verifiedBy) {
-  try {
-    var sheet = SpreadsheetApp.openById(PAYMENT_TRACKING_ID).getSheetByName(TAB_PAYMENTS);
-    var data    = sheet.getDataRange().getValues();
-    var headers = data[0];
-    var idCol   = headers.indexOf("payment_id");
-    var stCol   = headers.indexOf("status");
-    var vdCol   = headers.indexOf("payment_verified_date");
-    var vbCol   = headers.indexOf("payment_verified_by");
-
-    for (var i = 1; i < data.length; i++) {
-      if (data[i][idCol] !== paymentId) continue;
-
-      sheet.getRange(i + 1, stCol + 1).setValue("Verified");
-      sheet.getRange(i + 1, vdCol + 1).setValue(new Date());
-      sheet.getRange(i + 1, vbCol + 1).setValue(verifiedBy);
-
-      var hhId  = data[i][headers.indexOf("household_id")];
-      var email = data[i][headers.indexOf("primary_email")];
-      var hh    = getHouseholdById(hhId);
-
-      // Activate the household
-      updateHouseholdField(hhId, "active", true, verifiedBy);
-      updateHouseholdField(hhId, "application_status", "Approved", verifiedBy);
-
-      // Set expiration date (1 year from today, or +duration for temporary)
-      var expDate;
-      if (hh && hh.membership_duration_months) {
-        expDate = addDays(new Date(), hh.membership_duration_months * 30);
-      } else {
-        expDate = new Date(new Date().getFullYear(), 11, 31); // Dec 31 of current year
-      }
-      updateHouseholdField(hhId, "membership_expiration_date", expDate, verifiedBy);
-
-      // Set activation date on all individual members
-      var members = getHouseholdMembers(hhId);
-      for (var j = 0; j < members.length; j++) {
-        updateMemberField(members[j].individual_id, "activation_date", new Date(), verifiedBy);
-      }
-
-      // Send confirmation email to member
-      var level = getMembershipLevel(hh ? hh.membership_level_id : null);
-      sendEmail("tpl_026", email, {
-        FIRST_NAME:       _getPrimaryFirstName(hhId),
-        DUES_USD:         level ? level.annual_dues_usd : "",
-        DUES_BWP:         level ? level.annual_dues_bwp : "",
-        PAYMENT_METHOD:   data[i][headers.indexOf("payment_method")],
-        PAYMENT_REFERENCE: data[i][headers.indexOf("payment_reference")],
-        CONFIRMATION_DATE: formatDate(new Date()),
-        MEMBERSHIP_LEVEL:  hh ? hh.membership_type : "",
-        EXPIRATION_DATE:   formatDate(expDate),
-        IF_NEW_MEMBER:     !hh || !hh.first_login_date ? "true" : ""
-      });
-
-      logAuditEntry(verifiedBy, AUDIT_PAYMENT_VERIFIED, "Payment", paymentId,
-                    "Payment verified, household activated: " + hhId);
-      return successResponse({}, "Payment confirmed and membership activated.");
-    }
-    return errorResponse("Payment record not found.", "NOT_FOUND");
-  } catch (e) {
-    Logger.log("ERROR _confirmPayment: " + e);
-    return errorResponse("Could not confirm payment.", "SERVER_ERROR");
-  }
-}
-
-function _markPaymentNotFound(paymentId, markedBy) {
-  try {
-    var sheet = SpreadsheetApp.openById(PAYMENT_TRACKING_ID).getSheetByName(TAB_PAYMENTS);
-    var data    = sheet.getDataRange().getValues();
-    var headers = data[0];
-    var idCol   = headers.indexOf("payment_id");
-    var stCol   = headers.indexOf("status");
-
-    for (var i = 1; i < data.length; i++) {
-      if (data[i][idCol] !== paymentId) continue;
-      sheet.getRange(i + 1, stCol + 1).setValue("Not Found");
-      logAuditEntry(markedBy, AUDIT_PAYMENT_SUBMITTED, "Payment", paymentId,
-                    "Payment not found in account");
-      return successResponse({}, "Payment marked as not found.");
-    }
-    return errorResponse("Payment record not found.", "NOT_FOUND");
-  } catch (e) {
-    return errorResponse("Could not update payment.", "SERVER_ERROR");
-  }
-}
+var MEMBER_DIRECTORY_ID   = "1sziizIl6-iOMDgVx5okS3uuu_s5P7caytJt650zWGKg";
+var RESERVATIONS_ID       = "1ex842fsnFpAnlh-5QE-u6xaBMTO52JGQTsriaxjk2EI";
+var SYSTEM_BACKEND_ID     = "1WvN4xU_ZxElwpkXQVdt0HlUkjXcCA_ZaImklSLvuzeI";
+var PAYMENT_TRACKING_ID   = "1w6XxUwaEq_-sLAn3edy8JYkL2EBNwgDAfkz0GHlD8zg";
 
 
 // ============================================================
-// SHARED PRIVATE HELPERS
+// SECTION 2: SPREADSHEET TAB NAMES
+// ============================================================
+// These are the exact names of each tab (sheet) within the
+// spreadsheets above. If you rename a tab, update it here.
 // ============================================================
 
-/**
- * Returns upcoming reservations for a household (future, not cancelled).
- */
-function _getMemberUpcomingReservations(householdId) {
-  var today = new Date(); today.setHours(0, 0, 0, 0);
-  try {
-    var sheet = SpreadsheetApp.openById(RESERVATIONS_ID).getSheetByName(TAB_RESERVATIONS);
-    var data    = sheet.getDataRange().getValues();
-    var headers = data[0];
-    var results = [];
+// GEA Member Directory tabs
+var TAB_HOUSEHOLDS          = "Households";
+var TAB_INDIVIDUALS         = "Individuals";
+var TAB_MEMBERSHIP_LEVELS   = "Membership Levels";
 
-    for (var i = 1; i < data.length; i++) {
-      var res = rowToObject(headers, data[i]);
-      if (res.household_id !== householdId) continue;
-      if (res.status === STATUS_CANCELLED) continue;
-      if (new Date(res.event_date) < today) continue;
-      results.push(res);
-    }
-    results.sort(function(a, b) { return new Date(a.event_date) - new Date(b.event_date); });
-    return results;
-  } catch (e) {
-    Logger.log("ERROR _getMemberUpcomingReservations: " + e);
-    return [];
-  }
-}
+// GEA Reservations tabs
+var TAB_RESERVATIONS        = "Reservations";
+var TAB_GUEST_LISTS         = "Guest Lists";
+var TAB_USAGE_TRACKING      = "Usage Tracking";
 
-/**
- * Returns all reservations for a household (all statuses, sorted newest first).
- */
-function _getMemberAllReservations(householdId) {
-  try {
-    var sheet = SpreadsheetApp.openById(RESERVATIONS_ID).getSheetByName(TAB_RESERVATIONS);
-    var data    = sheet.getDataRange().getValues();
-    var headers = data[0];
-    var results = [];
+// GEA System Backend tabs
+var TAB_CONFIGURATION       = "Configuration";
+var TAB_EMAIL_TEMPLATES     = "Email Templates";
+var TAB_AUDIT_LOG           = "Audit Log";
+var TAB_PENDING_APPROVALS   = "Pending Approvals";
+var TAB_HOLIDAY_CALENDAR    = "Holiday Calendar";
+var TAB_SESSIONS        = "Sessions";
 
-    for (var i = 1; i < data.length; i++) {
-      var res = rowToObject(headers, data[i]);
-      if (res.household_id !== householdId) continue;
-      results.push(res);
-    }
-    results.sort(function(a, b) { return new Date(b.event_date) - new Date(a.event_date); });
-    return results;
-  } catch (e) {
-    Logger.log("ERROR _getMemberAllReservations: " + e);
-    return [];
-  }
-}
+// GEA Payment Tracking tabs
+var TAB_PAYMENTS            = "Payments";
 
-/**
- * Returns a subset of household fields safe to send to the browser.
- */
-function _safePublicHousehold(hh) {
-  if (!hh) return null;
-  return {
-    household_id:               hh.household_id,
-    household_name:             hh.household_name,
-    household_type:             hh.household_type,
-    membership_type:            hh.membership_type,
-    application_status:         hh.application_status,
-    active:                     hh.active,
-    membership_expiration_date: hh.membership_expiration_date
-                                ? formatDate(new Date(hh.membership_expiration_date)) : ""
-  };
-}
+
+// ============================================================
+// SECTION 3: GOOGLE DRIVE FOLDER IDs
+// ============================================================
+// These are the unique identifiers for each folder in the
+// GEA Administration Shared Drive.
+// To find: Open folder → look at URL after /folders/
+// ============================================================
+
+var FOLDER_PHOTOS_PENDING           = "1NFdaFXAStYA2nYGLlZ2itbB-Ap9WMoy-";
+var FOLDER_PHOTOS_APPROVED          = "1YU3C99eCyzU3DbW_iLw65bNSUiognOW3";
+var FOLDER_DOCUMENTS                = "1z_u96Ooc45SluZkbL_Z4JQcgfd3WBpFK";
+var FOLDER_MEMBERSHIP_APPLICATIONS  = "1NNSnUQElNRl1pDzr0pYVlTzXJod2aN6T";
+var FOLDER_BRAND_ASSETS             = "1kxQ0hcFO3jQHIiOro2HksaJw56lpvDV0";
+var FOLDER_PAYMENT_CONFIRMATIONS    = "1vmcu23niZhkC6b2Ctw6gmVLxwM2dKUee";
+var FOLDER_PASSPORT_SCANS           = "1uNDYDRLo_NpHTgNMvdiobuni5Jm_6kk8";
+
+
+// ============================================================
+// SECTION 4: LOGO AND BRAND ASSET URLs
+// ============================================================
+// Direct links to logo files stored in Google Drive.
+// Format: https://drive.google.com/uc?export=view&id=FILE_ID
+//
+// TO GET FILE ID:
+// Right-click file in Drive → Share → Copy link
+// Extract the ID from: /d/[ID HERE]/view
+//
+// NOTE: Files must be shared as "Anyone with link can view"
+// ============================================================
+
+// Round logo (used in emails and membership cards)
+var LOGO_ROUND_80_URL     = "https://drive.google.com/uc?export=view&id=1t56YALo84jKVnYI02lCs6CT3_jE0Yakf";     // 80px - email header
+var LOGO_ROUND_120_URL    = "https://drive.google.com/uc?export=view&id=1BI6PAV4_cMNdn-eSB2NX4roSiiKlwBn0";    // 120px - membership card
+var LOGO_ROUND_160_URL    = "https://drive.google.com/uc?export=view&id=1AbEGPU9Nb-QO6GGYIVCSQGlDakL6J8Tb";    // 160px - retina email
+var LOGO_ROUND_200_URL    = "https://drive.google.com/uc?export=view&id=1wGnQy-jGHqHrUiqABvtCbB-37cTRJms2";    // 200px - website
+var LOGO_ROUND_240_URL    = "https://drive.google.com/uc?export=view&id=18h23LEMsXtajiwD9BuZuiX5ELArT3yBh";    // 240px - retina card
+
+// Logotype - light version (dark text, for white/light backgrounds)
+var LOGO_TYPE_LIGHT_560_URL  = "https://drive.google.com/uc?export=view&id=1_iKvmRPKg79wi3fHeHkfn0UKQhp4IQE7";  // email
+var LOGO_TYPE_LIGHT_800_URL  = "https://drive.google.com/uc?export=view&id=1fZHhjH9qWpfcPWpg17me53Td0lt9TvMZ";  // website/print
+var LOGO_TYPE_LIGHT_1120_URL = "https://drive.google.com/uc?export=view&id=1seQiLgTrFZUdv6pHTD1YCtO67OlloEkR"; // retina email
+
+// Logotype - dark version (white text, for dark backgrounds)
+var LOGO_TYPE_DARK_560_URL   = "https://drive.google.com/uc?export=view&id=1nJ_NhfSjmim0BhlzHF90xk5_KXsZuoWx";   // dark backgrounds
+var LOGO_TYPE_DARK_800_URL   = "https://drive.google.com/uc?export=view&id=1DuUl2nbQtsFP1iPbp0KWyYTP3Yb4GKww";   // website header
+var LOGO_TYPE_DARK_1120_URL  = "https://drive.google.com/uc?export=view&id=1C_yW33TX3ZygsPnaJEicyN_dGdmTTJEs";  // dark retina
+
+// Favicon
+var FAVICON_URL = "https://drive.google.com/uc?export=view&id=1s30vYml-JNZK_8aoV6bPWRQc_wSz_BtU";  // 32px browser tab
+
+
+// ============================================================
+// SECTION 5: BRAND COLORS
+// ============================================================
+// Official GEA color palette.
+// Used in HTML emails and web app interfaces.
+// ============================================================
+
+// Primary brand colors
+var COLOR_OLD_GLORY_BLUE  = "#0A3161";   // Primary: headers, buttons, headings
+var COLOR_OLD_GLORY_RED   = "#B31942";   // Accent: decorative elements, alerts
+var COLOR_WHITE           = "#FFFFFF";   // Backgrounds, text on dark
+var COLOR_BOTSWANA_BLUE   = "#ABCAE9";   // Secondary: info boxes, subtle highlights
+var COLOR_BLACK           = "#000000";   // Body text
+
+// Functional colors (status indicators)
+var COLOR_SUCCESS         = "#2E7D32";   // Approved, confirmed, valid, active
+var COLOR_WARNING         = "#E65100";   // Pending, tentative, approaching deadlines
+var COLOR_DANGER          = "#C62828";   // Denied, cancelled, urgent, overdue
+var COLOR_INFO            = "#1565C0";   // Informational notices
+
+// Supporting colors
+var COLOR_LIGHT_GRAY      = "#F5F5F5";   // Page backgrounds, subtle separators
+var COLOR_MEDIUM_GRAY     = "#757575";   // Secondary text, labels
+var COLOR_BORDER_GRAY     = "#E0E0E0";   // Dividers, borders
+
+
+// ============================================================
+// SECTION 6: EMAIL ADDRESSES
+// ============================================================
+// Update these when board positions change hands.
+// Distribution lists (Groups) are managed in Google Admin.
+// ============================================================
+
+// Board member accounts
+var EMAIL_CHAIR           = "chair@geabotswana.org";
+var EMAIL_TREASURER       = "treasurer@geabotswana.org";
+var EMAIL_SECRETARY       = "secretary@geabotswana.org";
+
+// Distribution lists (Google Groups)
+var EMAIL_BOARD           = "board@geabotswana.org";
+var EMAIL_MEMBERS         = "members@geabotswana.org";
+var EMAIL_RSO             = "treasurer@geabotswana.org";
+var EMAIL_MGT             = "mgt-notify@geabotswana.org";
+
+// Legacy institutional email (recovery/backup only - do not use for operations)
+var EMAIL_LEGACY          = "geaboard@gmail.com";
+
+// System sender name (appears in "From" field of automated emails)
+var EMAIL_SENDER_NAME     = "Gaborone Employee Association";
+
+
+// ============================================================
+// SECTION 7: ASSOCIATION INFORMATION
+// ============================================================
+// Basic information used in emails, cards, and the website.
+// ============================================================
+
+var ASSOCIATION_NAME          = "Gaborone Employee Association";
+var ASSOCIATION_SHORT_NAME    = "GEA";
+var ASSOCIATION_WEBSITE       = "www.geabotswana.org";
+var ASSOCIATION_WEBSITE_FULL  = "https://www.geabotswana.org";
+var ASSOCIATION_EMAIL         = "board@geabotswana.org";
+var ASSOCIATION_LOCATION      = "U.S. Mission to Botswana, Gaborone";
+var CURRENT_MEMBERSHIP_YEAR   = "2025-2026";  // Update each renewal cycle
+
+
+// ============================================================
+// SECTION 8: MEMBERSHIP CONFIGURATION
+// ============================================================
+// Membership category identifiers and business rules.
+// Dues amounts are stored in the Membership Levels spreadsheet
+// tab, but category names are referenced here for code logic.
+// ============================================================
+
+// Membership categories (must match membership_category column in Membership Levels tab)
+var CATEGORY_FULL         = "Full";
+var CATEGORY_AFFILIATE    = "Affiliate";
+var CATEGORY_ASSOCIATE    = "Associate";
+var CATEGORY_DIPLOMATIC   = "Diplomatic";
+var CATEGORY_COMMUNITY    = "Community";
+var CATEGORY_TEMPORARY    = "Temporary";
+
+// Household types
+var HOUSEHOLD_INDIVIDUAL  = "Individual";
+var HOUSEHOLD_FAMILY      = "Family";
+
+// Relationship types (must match relationship_to_primary column in Individuals tab)
+var RELATIONSHIP_PRIMARY  = "Primary";
+var RELATIONSHIP_SPOUSE   = "Spouse";
+var RELATIONSHIP_CHILD    = "Child";
+var RELATIONSHIP_STAFF    = "Staff";
+
+// Membership categories that require a sponsor
+// (all non-Embassy/non-Full members need sponsorship)
+var CATEGORIES_REQUIRING_SPONSOR = [
+  CATEGORY_AFFILIATE,
+  CATEGORY_ASSOCIATE,
+  CATEGORY_DIPLOMATIC,
+  CATEGORY_COMMUNITY,
+  CATEGORY_TEMPORARY
+];
+
+// Maximum duration for Temporary membership (months)
+var MAX_TEMPORARY_MONTHS  = 6;
+
+
+// ============================================================
+// SECTION 9: AGE THRESHOLDS
+// ============================================================
+// Age-based access rules. Stored as config parameters so
+// future boards can adjust via the Admin Interface without
+// changing code.
+// These values should mirror the Configuration tab in
+// GEA System Backend spreadsheet.
+// ============================================================
+
+var AGE_UNACCOMPANIED_ACCESS  = 15;  // Minimum age: unaccompanied rec center access
+var AGE_FITNESS_CENTER        = 15;  // Minimum age: fitness center use
+var AGE_VOTING                = 16;  // Minimum age: vote in elections
+var AGE_OFFICE_ELIGIBLE       = 16;  // Minimum age: hold board position
+var AGE_DOCUMENT_REQUIRED     = 16;  // Minimum age: passport/ID upload required
+                                     // (under-16 policy pending board review)
+
+
+// ============================================================
+// SECTION 10: FACILITY RESERVATION RULES
+// ============================================================
+// Booking limits and business rules for each facility.
+// ============================================================
+
+// Tennis / Basketball Court
+var TENNIS_WEEKLY_LIMIT_HOURS   = 3;      // Max hours per household per week
+var TENNIS_SESSION_MAX_HOURS    = 2;      // Max hours per single session
+var TENNIS_WALKIN_AVAILABLE     = true;   // Allow walk-up use when not reserved
+var TENNIS_BUMP_WINDOW_DAYS     = 1;      // Calendar days before event: can be bumped
+
+// Leobo (and Whole Facility)
+var LEOBO_MONTHLY_LIMIT         = 1;      // Max reservations per household per month
+var LEOBO_MAX_HOURS             = 6;      // Max hours per leobo reservation
+var LEOBO_BUMP_WINDOW_DAYS      = 5;      // Business days before event: can be bumped
+
+// Guest list
+var GUEST_LIST_DEADLINE_DAYS    = 3;      // Business days before event for RSO notice
+
+// Board approval
+var BOARD_APPROVAL_HOURS        = 24;     // Expected turnaround for board approval (hours)
+
+// Reservation statuses
+// These are the valid values for the status column in the Reservations tab
+var STATUS_PENDING      = "Pending";      // Awaiting approval
+var STATUS_APPROVED     = "Approved";     // Approved standard reservation
+var STATUS_TENTATIVE    = "Tentative";    // Approved excess reservation (subject to bumping)
+var STATUS_CONFIRMED    = "Confirmed";    // Past bumping window - fully locked in
+var STATUS_CANCELLED    = "Cancelled";    // Cancelled for any reason
+var STATUS_COMPLETED    = "Completed";    // Event date has passed
+var STATUS_WAITLISTED   = "Waitlisted";   // On waitlist for a taken slot
+
+// Facilities (must match facility column in Reservations tab)
+var FACILITY_TENNIS     = "Tennis Court";
+var FACILITY_LEOBO      = "Leobo";
+var FACILITY_WHOLE      = "Whole Facility";
+
+// Facilities that require board/MGT approval
+var FACILITIES_REQUIRING_APPROVAL = [
+  FACILITY_LEOBO,
+  FACILITY_WHOLE
+];
+
+
+// ============================================================
+// SECTION 11: STAFF MEMBER RULES
+// ============================================================
+// Household staff (nannies, caregivers) have limited access.
+// They are in the member database but have restricted privileges.
+// ============================================================
+
+var STAFF_MAX_CHILDREN          = 99;    // Max children staff can escort (99 = unlimited)
+var STAFF_GUEST_CHILDREN        = false; // Can staff bring non-member children? NO
+var STAFF_RESERVATION_ALLOWED   = false; // Can staff make reservations? NO
+var STAFF_LEOBO_ACCESS          = false; // Can staff access leobo independently? NO
+var STAFF_EMAIL_REQUIRED        = false; // Is email address required for staff? NO
+
+
+// ============================================================
+// SECTION 12: DOCUMENT VERIFICATION
+// ============================================================
+// Rules for passport/ID uploads during membership application.
+// ============================================================
+
+// Accepted document types by citizen category
+var DOCS_BOTSWANA_CITIZENS      = ["Omang", "Passport"];   // Either accepted
+var DOCS_OTHER_CITIZENS         = ["Passport"];             // Passport required
+var DOCS_FULL_MEMBERS           = ["Passport", "Omang"];   // Required for all
+
+// Document types (must match document_type column in Individuals tab)
+var DOC_TYPE_PASSPORT   = "Passport";
+var DOC_TYPE_OMANG      = "Omang";
+var DOC_TYPE_NATIONAL   = "National ID";
+var DOC_TYPE_NONE       = "None";
+
+// Passport expiration warning (months before expiry to notify member)
+var PASSPORT_WARNING_MONTHS     = 6;
+
+// Youth document policy
+var YOUTH_DOCUMENT_REQUIRED     = false; // Require docs for under-16? (pending review)
+
+
+// ============================================================
+// SECTION 13: PAYMENT CONFIGURATION
+// ============================================================
+// Payment methods and account details.
+// Dues amounts in USD and BWP are kept in GEA Member Directory.Membership Levels.
+// ============================================================
+
+// Payment methods (must match payment_method column in Payments tab)
+var PAYMENT_SDFCU       = "SDFCU";
+var PAYMENT_PAYPAL      = "PayPal";
+var PAYMENT_ZELLE       = "Zelle";
+var PAYMENT_ABSA        = "ABSA";
+var PAYMENT_OTHER       = "Other";
+
+// SDFCU (USD bank transfer - US-based)
+var SDFCU_ACCOUNT_NAME  = "Gaborone Employee Association";
+var SDFCU_BANK_ADDRESS  = "SDFCU - 1630 King Street, Alexandria, VA 22314";
+var SDFCU_ACCOUNT_NUM   = "1010000268360";
+var SDFCU_ROUTING_NUM   = "256075342";
+var SDFCU_MEMBER_CODE   = "GEA2026";
+
+// PayPal
+var PAYPAL_LINK         = "https://www.paypal.biz/GEABoard";
+var PAYPAL_EMAIL        = "Geaboard@gmail.com";
+
+// Zelle
+var ZELLE_EMAIL         = "Geaboard@gmail.com";
+
+// ABSA (BWP bank transfer - Botswana-based)
+var ABSA_ACCOUNT_NAME   = "U.S. Embassy - Gaborone Employee Association";
+var ABSA_ACCOUNT_NUM    = "1005193";
+var ABSA_BRANCH         = "02 (Government Enclave Branch)";
+var ABSA_SWIFT          = "BARCBWGX";
+
+
+// ============================================================
+// SECTION 14: NOTIFICATION AND SCHEDULING
+// ============================================================
+// Settings for automated emails and scheduled tasks.
+// All nightly checks run via Apps Script time-driven triggers.
+// ============================================================
+
+// Membership renewal reminders (days before expiration)
+var RENEWAL_REMINDER_DAYS_1     = 30;    // First reminder: 30 days before expiry
+var RENEWAL_REMINDER_DAYS_2     = 7;     // Second reminder: 7 days before expiry
+
+// RSO daily summary
+var RSO_SUMMARY_HOUR            = 6;     // Hour to send daily summary (6 = 6:00 AM)
+var RSO_SUMMARY_TIMEZONE        = "Africa/Gaborone";
+
+// Holiday calendar reminder
+var HOLIDAY_REMINDER_MONTH      = 11;    // Month to send reminder (11 = November)
+var HOLIDAY_REMINDER_DAY        = 1;     // Day of month to send reminder
+
+// Waitlist slot hold time
+var WAITLIST_HOLD_HOURS         = 24;    // Hours to hold a slot for waitlisted member
+
+// Birthday notifications
+var BIRTHDAY_CHECK_HOUR         = 7;     // Hour to send birthday emails (7 = 7:00 AM)
+
+// Photo submission reminder
+var PHOTO_REMINDER_DAYS_AFTER   = 7;     // Days after activation to remind if no photo
+
+// Session duration
+var SESSION_TIMEOUT_HOURS       = 24;     // Sessions expire after 24 hours of inactivity
+
+// ============================================================
+// SECTION 15: HOLIDAY CALENDAR
+// ============================================================
+// Holiday types used in the Holiday Calendar tab.
+// Business day calculations exclude weekends + these holidays.
+// Admin can update holidays annually via Admin Interface.
+// ============================================================
+
+var HOLIDAY_TYPE_US         = "US Federal";       // US federal holidays
+var HOLIDAY_TYPE_BOTSWANA   = "Botswana Public";  // Botswana public holidays
+var HOLIDAY_TYPE_ONEOFF     = "One-Off";           // Ad hoc declared holidays
+
+// Holiday calendar scope
+var HOLIDAY_CALENDARS = ["US Federal", "Botswana Public", "One-Off"];
+
+
+// ============================================================
+// SECTION 16: PHOTO MANAGEMENT
+// ============================================================
+// Rules for member photo uploads and approval.
+// ============================================================
+
+// Photo statuses (must match photo_status column in Individuals tab)
+var PHOTO_STATUS_NONE       = "none";
+var PHOTO_STATUS_PENDING    = "pending";
+var PHOTO_STATUS_APPROVED   = "approved";
+var PHOTO_STATUS_REJECTED   = "rejected";
+
+// Photo upload constraints
+var PHOTO_MAX_SIZE_MB       = 2;                      // Maximum file size in MB
+var PHOTO_ACCEPTED_TYPES    = ["image/jpeg",
+                               "image/png"];           // Accepted file types
+
+// Photo rejection reasons (shown to member in rejection email)
+var PHOTO_REJECTION_REASONS = [
+  "Not passport-style (full face not clearly visible)",
+  "Photo quality too low",
+  "Background not suitable",
+  "Not a recent photo",
+  "Inappropriate content",
+  "Other"
+];
+
+
+// ============================================================
+// SECTION 17: PORTAL AND WEBSITE URLs
+// ============================================================
+// URLs used in emails and the web app for navigation links.
+// Update if page structure of the Google Site changes.
+// ============================================================
+
+var URL_HOME            = "https://www.geabotswana.org";
+var URL_MEMBER_PORTAL   = "https://www.geabotswana.org/member-portal";
+var URL_ADMIN_PORTAL    = "https://www.geabotswana.org/admin";
+var URL_RESERVATION     = "https://www.geabotswana.org/reservations";
+var URL_MEMBERSHIP_CARD = "https://www.geabotswana.org/my-card";
+var URL_PAYMENT         = "https://www.geabotswana.org/payment";
+var URL_GUEST_LIST      = "https://www.geabotswana.org/guest-list";
+var URL_VERIFY          = "https://www.geabotswana.org/verify"; // QR code verification
+
+// NOTE: These URLs will be updated once the Apps Script web app
+// is deployed and embedded in Google Sites. The exact URLs
+// depend on how the web app is published.
+
+
+// ============================================================
+// SECTION 18: AUDIT LOG
+// ============================================================
+// Action types recorded in the Audit Log tab.
+// Used for accountability and troubleshooting.
+// ============================================================
+
+var AUDIT_MEMBER_CREATED        = "MEMBER_CREATED";
+var AUDIT_MEMBER_UPDATED        = "MEMBER_UPDATED";
+var AUDIT_MEMBER_DEACTIVATED    = "MEMBER_DEACTIVATED";
+var AUDIT_PAYMENT_RECORDED      = "PAYMENT_RECORDED";
+var AUDIT_PAYMENT_VERIFIED      = "PAYMENT_VERIFIED";
+var AUDIT_RESERVATION_CREATED   = "RESERVATION_CREATED";
+var AUDIT_RESERVATION_APPROVED  = "RESERVATION_APPROVED";
+var AUDIT_RESERVATION_DENIED    = "RESERVATION_DENIED";
+var AUDIT_RESERVATION_CANCELLED = "RESERVATION_CANCELLED";
+var AUDIT_RESERVATION_BUMPED    = "RESERVATION_BUMPED";
+var AUDIT_PHOTO_SUBMITTED       = "PHOTO_SUBMITTED";
+var AUDIT_PHOTO_APPROVED        = "PHOTO_APPROVED";
+var AUDIT_PHOTO_REJECTED        = "PHOTO_REJECTED";
+var AUDIT_LOGIN                 = "LOGIN";
+var AUDIT_GUEST_LIST_SUBMITTED  = "GUEST_LIST_SUBMITTED";
+var AUDIT_APPLICATION_SUBMITTED = "APPLICATION_SUBMITTED";
+var AUDIT_APPLICATION_APPROVED  = "APPLICATION_APPROVED";
+var AUDIT_APPLICATION_DENIED    = "APPLICATION_DENIED";
+var AUDIT_CONFIG_UPDATED        = "CONFIG_UPDATED";
+var AUDIT_HOLIDAY_UPDATED       = "HOLIDAY_UPDATED";
+var AUDIT_LOGIN_FAILED          = "LOGIN_FAILED";
+var AUDIT_PASSWORD_SET          = "PASSWORD_SET";
+var AUDIT_PASSWORD_RESET        = "PASSWORD_RESET";
+
+
+// ============================================================
+// SECTION 19: ERROR MESSAGES
+// ============================================================
+// User-facing error messages displayed in the web app.
+// Centralizing them here makes future text updates easy.
+// ============================================================
+
+var ERR_NOT_MEMBER          = "Your email address is not registered as a GEA member. " +
+                              "Please apply for membership or contact board@geabotswana.org.";
+var ERR_MEMBERSHIP_EXPIRED  = "Your GEA membership has expired. " +
+                              "Please renew your membership to access the portal.";
+var ERR_MEMBERSHIP_PENDING  = "Your GEA membership application is still under review. " +
+                              "You will receive an email when a decision has been made.";
+var ERR_NOT_AUTHORIZED      = "You are not authorized to perform this action. " +
+                              "Please contact board@geabotswana.org if you believe this is an error.";
+var ERR_TENNIS_LIMIT        = "Your household has reached the weekly tennis court booking " +
+                              "limit of " + TENNIS_WEEKLY_LIMIT_HOURS + " hours. " +
+                              "Additional bookings this week require board approval.";
+var ERR_LEOBO_LIMIT         = "Your household has reached the monthly leobo booking limit. " +
+                              "Additional bookings this month require Management Officer approval.";
+var ERR_GUEST_LIST_LATE     = "Guest lists must be submitted at least " +
+                              GUEST_LIST_DEADLINE_DAYS + " business days before your event. " +
+                              "Please contact board@geabotswana.org for assistance.";
+var ERR_CONFLICT            = "This time slot is already reserved. " +
+                              "Please choose a different date or time.";
+var ERR_INDIVIDUAL_FAMILY   = "Individual memberships cover one person only. " +
+                              "Please upgrade to a Family membership to add household members.";
+var ERR_SPOUSE_EXISTS       = "A spouse/partner is already registered for this household. " +
+                              "Please contact board@geabotswana.org to make changes.";
+var ERR_STAFF_EXISTS        = "A household staff member is already registered for this household. " +
+                              "Only one staff member is permitted per household.";
+var ERR_EMERGENCY_CONTACT   = "Your emergency contact cannot be a member of your household. " +
+                              "Please provide a contact outside your household.";
+var ERR_INVALID_DURATION    = "Temporary membership duration must be between 1 and " +
+                              MAX_TEMPORARY_MONTHS + " months.";
+var ERR_YOUTH_UNACCOMPANIED = "Members under age " + AGE_UNACCOMPANIED_ACCESS +
+                              " must be accompanied by an adult household member to access GEA facilities.";
+
+
+// ============================================================
+// SECTION 19B: PASSWORD SECURITY
+// ============================================================
+// Password hashing and validation rules.
+// All member passwords are hashed — the system never stores plaintext.
+// Hashing is one-way: a hash cannot be reversed, only verified by 
+// re-hashing the plaintext password and comparing the results.
+// ============================================================
+
+// Minimum password length (security requirement)
+// Enforced on both frontend (user-friendly) and backend (security)
+var PASSWORD_MIN_LENGTH     = 12;        // Minimum 12 characters required
+
+// Password hashing algorithm
+// Uses Utilities.computeDigest() with SHA256
+// SHA256 is cryptographically secure and one-way
+var PASSWORD_HASH_ALGORITHM = "SHA256";
+
+
+// ============================================================
+// SECTION 19C: PHONE NUMBER SYSTEM
+// ============================================================
+// Three-field phone storage: country_code + phone_number + phone_whatsapp
+// Provides international support with dropdown validation and
+// ready-made formatting for SMS/WhatsApp integrations.
+//
+// FORMAT:
+// - country_code: Two-letter ISO country code (US, GB, BW, ZA, etc.)
+// - phone_number: Numeric-only phone digits (no + - or spaces)
+// - phone_whatsapp: Boolean (TRUE if number is on WhatsApp)
+//
+// EXAMPLE:
+// - Country: Botswana (BW), Code: +267, Phone: 71234567
+// - Stored as: country_code="BW", phone_number="71234567", phone_whatsapp=TRUE
+// - Displayed as: +267 71234567 (via formatPhoneNumber function)
+// ============================================================
+
+// ISO country codes supported in dropdown
+// Format: "CC" (two-letter ISO code)
+// Used to populate the intl-tel-input dropdown
+var SUPPORTED_COUNTRIES = [
+  "BW",  // Botswana
+  "US",  // United States
+  "GB",  // United Kingdom
+  "ZA",  // South Africa
+  "AU",  // Australia
+  "IE",  // Ireland
+  "TZ"   // Tanzania
+];
+
+// Country code to dial code mapping
+// Used when intl-tel-input returns country code, we need dial code for display
+var COUNTRY_CODE_TO_DIAL_CODE = {
+  "BW": "267",
+  "US": "1",
+  "GB": "44",
+  "ZA": "27",
+  "AU": "61",
+  "IE": "353",
+  "TZ": "255"
+};
+
+// Dial code to country code mapping (reverse lookup)
+// Used when we have a dial code, we need the country code
+var DIAL_CODE_TO_COUNTRY_CODE = {
+  "267": "BW",
+  "1": "US",
+  "44": "GB",
+  "27": "ZA",
+  "61": "AU",
+  "353": "IE",
+  "255": "TZ"
+};
+
+// Phone number length constraints by country
+// intl-tel-input handles most validation, but we do backend checks too
+var PHONE_LENGTH_CONSTRAINTS = {
+  "BW": { min: 7, max: 8 },    // Botswana: 7 digits landline, 8 digits cell
+  "US": { min: 10, max: 10 },  // USA: 10 digits
+  "GB": { min: 10, max: 11 },  // UK: 10-11 digits
+  "ZA": { min: 9, max: 9 },    // South Africa: 9 digits
+  "AU": { min: 9, max: 10 },   // Australia: 9-10 digits
+  "IE": { min: 9, max: 10 },   // Ireland: 9-10 digits
+  "TZ": { min: 9, max: 10 }    // Tanzania: 9-10 digits
+};
+
+// Preferred countries (shown at top of intl-tel-input dropdown)
+// For Embassy staff, this puts their most likely countries first
+var PREFERRED_COUNTRIES = ["BW", "US", "GB"];
+
+// Household phone sync setting
+var HOUSEHOLD_PHONE_SYNC_ENABLED = true;  // Enable nightly sync
+var HOUSEHOLD_PHONE_SYNC_HOUR = 2;        // Runs at 2:00 AM (server timezone)
+var HOUSEHOLD_PHONE_SYNC_MINUTE = 0;      // Runs at :00 minutes past the hour
+
+
+// ============================================================
+// SECTION 20: SYSTEM METADATA
+// ============================================================
+// Information about the system itself.
+// Useful for troubleshooting and documentation.
+// ============================================================
+
+var SYSTEM_NAME             = "GEA Management System";
+var SYSTEM_VERSION          = "1.23.0";
+var SYSTEM_BUILD_DATE       = "2026-02-16";
+var SYSTEM_DEVELOPER        = "Michael Raney, GEA Treasurer";
+var SYSTEM_CONTACT          = "treasurer@geabotswana.org";
+
+// ============================================================
+// END OF CONFIGURATION FILE
+// ============================================================
+// If you have made changes, save this file before continuing.
+// Questions about this file? Contact: treasurer@geabotswana.org
+// ============================================================
