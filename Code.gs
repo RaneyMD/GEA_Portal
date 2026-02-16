@@ -119,6 +119,8 @@ function _routeAction(action, params) {
     case "admin_photo":   return _handleAdminPhoto(params);
     case "admin_payment": return _handleAdminPayment(params);
 
+    // ── DIAGNOSTICS ──────────────────────────────────────────
+    case "image_diagnostic":  return _handleImageDiagnostic(params);
 
     default:
       return errorResponse("Unknown action: " + action, "NOT_FOUND");
@@ -984,6 +986,343 @@ function _getMemberAllReservations(householdId) {
     Logger.log("ERROR _getMemberAllReservations: " + e);
     return [];
   }
+}
+
+/**
+ * HANDLER: _handleImageDiagnostic
+ * PURPOSE: Serve a live diagnostic page showing all image assets defined in Config.gs.
+ *
+ * WHAT IT DOES:
+ * 1. Pulls all image URLs from Config.gs constants (logos, favicon, etc.)
+ * 2. Renders an HTML page with a grid of image cards
+ * 3. Each card displays the image and its constant name
+ * 4. Visual indicators show which images load successfully (✓ green) vs fail (✗ red)
+ * 5. Displays the full URL for each constant for easy debugging
+ *
+ * CALLED BY: doGet() when action=image_diagnostic
+ *
+ * @param {object} p - Query parameters (unused for this handler)
+ * @returns {HtmlOutput} Diagnostic page with live image tests
+ */
+function _handleImageDiagnostic(params) {
+  var html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEA Config.gs Image Diagnostic</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #0A3161;
+            margin-bottom: 10px;
+            border-bottom: 4px solid #B31942;
+            padding-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .image-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .image-card.error {
+            border-left: 5px solid #C62828;
+        }
+        
+        .image-card.success {
+            border-left: 5px solid #2E7D32;
+        }
+        
+        .image-preview {
+            width: 100%;
+            height: 200px;
+            background: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #999;
+            overflow: hidden;
+        }
+        
+        .image-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            padding: 10px;
+        }
+        
+        .image-info {
+            padding: 15px;
+        }
+        
+        .constant-name {
+            font-weight: 700;
+            color: #0A3161;
+            margin-bottom: 8px;
+            word-break: break-word;
+            font-size: 13px;
+        }
+        
+        .url-field {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #333;
+            word-break: break-all;
+            max-height: 80px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-badge.ok {
+            background: #E8F5E9;
+            color: #2E7D32;
+            border: 1px solid #C8E6C9;
+        }
+        
+        .status-badge.error {
+            background: #FFEBEE;
+            color: #C62828;
+            border: 1px solid #FFCDD2;
+        }
+        
+        .error-message {
+            color: #C62828;
+            font-size: 11px;
+            margin-top: 8px;
+            padding: 8px;
+            background: #FFEBEE;
+            border-radius: 3px;
+            border-left: 3px solid #C62828;
+        }
+        
+        .summary {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .summary-item {
+            text-align: center;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .summary-item.working {
+            background: #E8F5E9;
+        }
+        
+        .summary-item.broken {
+            background: #FFEBEE;
+        }
+        
+        .summary-count {
+            font-size: 28px;
+            font-weight: 700;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .summary-label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GEA Config.gs Image Diagnostic</h1>
+        <p class="subtitle">Live image test - URLs pulled directly from Config.gs</p>
+        
+        <div class="summary">
+            <div class="summary-item working" id="workingCount">
+                <span class="summary-count" id="countWorking">0</span>
+                <span class="summary-label">Working ✓</span>
+            </div>
+            <div class="summary-item broken" id="brokenCount">
+                <span class="summary-count" id="countBroken">0</span>
+                <span class="summary-label">Broken ✗</span>
+            </div>
+        </div>
+        
+        <div class="image-grid" id="imageGrid">
+            <!-- Images will be populated here -->
+        </div>
+    </div>
+
+    <script>
+        // Image constants pulled from Code.gs
+        const imageConstants = ` + JSON.stringify(getImageConstants()) + `;
+        
+        // Track status
+        const imageStatus = {};
+        let totalLoaded = 0;
+        let totalFailed = 0;
+        
+        // Initialize
+        Object.keys(imageConstants).forEach(key => {
+            imageStatus[key] = 'loading';
+        });
+        
+        function renderImages() {
+            const grid = document.getElementById('imageGrid');
+            grid.innerHTML = '';
+            
+            Object.entries(imageConstants).forEach(([constantName, url]) => {
+                const status = imageStatus[constantName];
+                const isError = status === 'error';
+                
+                const card = document.createElement('div');
+                card.className = 'image-card ' + (isError ? 'error' : 'success');
+                card.id = 'card-' + constantName;
+                
+                const statusBadge = isError ? 
+                    '<span class="status-badge error">✗ Failed</span>' :
+                    '<span class="status-badge ok">✓ Loaded</span>';
+                
+                const errorMsg = isError ? 
+                    '<div class="error-message">Image failed to load - URL may be invalid</div>' :
+                    '';
+                
+                card.innerHTML = \`
+                    <div class="image-preview" id="preview-\${constantName}">
+                        <img src="\${url}" 
+                             onerror="handleImageError('\${constantName}')" 
+                             onload="handleImageLoad('\${constantName}')"
+                             alt="\${constantName}">
+                    </div>
+                    <div class="image-info">
+                        <div class="constant-name">\${constantName}</div>
+                        <div style="margin-bottom: 10px;">\${statusBadge}</div>
+                        <div class="url-field">\${escapeHtml(url)}</div>
+                        \${errorMsg}
+                    </div>
+                \`;
+                
+                grid.appendChild(card);
+            });
+        }
+        
+        function handleImageLoad(constantName) {
+            imageStatus[constantName] = 'ok';
+            totalLoaded++;
+            updateSummary();
+            updateCard(constantName);
+        }
+        
+        function handleImageError(constantName) {
+            imageStatus[constantName] = 'error';
+            totalFailed++;
+            updateSummary();
+            updateCard(constantName);
+        }
+        
+        function updateCard(constantName) {
+            const card = document.getElementById('card-' + constantName);
+            if (!card) return;
+            
+            const isError = imageStatus[constantName] === 'error';
+            card.className = 'image-card ' + (isError ? 'error' : 'success');
+        }
+        
+        function updateSummary() {
+            document.getElementById('countWorking').textContent = totalLoaded;
+            document.getElementById('countBroken').textContent = totalFailed;
+        }
+        
+        function escapeHtml(text) {
+            const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'};
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+        
+        // Render on load
+        renderImages();
+    </script>
+</body>
+</html>
+  `;
+
+  return HtmlService.createHtmlOutput(html)
+    .setTitle("GEA Image Diagnostic")
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/**
+ * HELPER: getImageConstants
+ * PURPOSE: Collect all image URL constants from Config.gs into a single object.
+ *
+ * RETURNS: Object with constant names as keys and their URL values.
+ * Used by _handleImageDiagnostic to populate the diagnostic page.
+ */
+function getImageConstants() {
+  return {
+    'FAVICON_URL': FAVICON_URL,
+    'LOGO_ROUND_80_URL': LOGO_ROUND_80_URL,
+    'LOGO_ROUND_120_URL': LOGO_ROUND_120_URL,
+    'LOGO_ROUND_160_URL': LOGO_ROUND_160_URL,
+    'LOGO_ROUND_200_URL': LOGO_ROUND_200_URL,
+    'LOGO_ROUND_240_URL': LOGO_ROUND_240_URL,
+    'LOGO_TYPE_LIGHT_560_URL': LOGO_TYPE_LIGHT_560_URL,
+    'LOGO_TYPE_LIGHT_800_URL': LOGO_TYPE_LIGHT_800_URL,
+    'LOGO_TYPE_DARK_560_URL': LOGO_TYPE_DARK_560_URL,
+    'LOGO_TYPE_DARK_800_URL': LOGO_TYPE_DARK_800_URL
+  };
 }
 
 /**
