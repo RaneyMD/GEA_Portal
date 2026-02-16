@@ -1112,6 +1112,9 @@
         
         // The API URL is injected by Google Apps Script at render time
         // via the HtmlService template system (<?= ... ?>)
+        // This is the web app deployment URL where Code.gs handlers receive requests
+        var PORTAL_API_URL = '<?= SCRIPT_URL ?>';
+        
         var currentToken = null;
         var currentUser = null;
         var currentHousehold = null;
@@ -1134,22 +1137,54 @@
             var errorDiv = document.getElementById('loginError');
             var submitButton = document.getElementById('loginSubmit');
             
+            // Validate inputs
+            if (!email || !password) {
+                errorDiv.textContent = 'Please enter both email and password.';
+                errorDiv.classList.add('show');
+                return;
+            }
+            
             // Clear previous error
             errorDiv.classList.remove('show');
             errorDiv.textContent = '';
             submitButton.disabled = true;
             submitButton.textContent = 'Signing in...';
             
+            // Build the API URL with proper query parameters
+            var loginUrl = PORTAL_API_URL + 
+                '?action=login' + 
+                '&email=' + encodeURIComponent(email) + 
+                '&password=' + encodeURIComponent(password);
+            
+            console.log('Login URL:', loginUrl);
+            
             // Call the backend's login action
-            fetch(PORTAL_API_URL + '?action=login&email=' + encodeURIComponent(email) + '&password=' + encodeURIComponent(password))
-                .then(function(r) { return r.json(); })
+            fetch(loginUrl)
+                .then(function(r) { 
+                    console.log('Response status:', r.status);
+                    if (!r.ok) {
+                        throw new Error('HTTP ' + r.status + ': ' + r.statusText);
+                    }
+                    return r.json(); 
+                })
                 .then(function(res) {
+                    console.log('Login response:', res);
+                    
                     submitButton.disabled = false;
                     submitButton.textContent = 'Sign In';
                     
                     if (!res.success) {
                         errorDiv.textContent = res.message || 'Login failed. Please check your email and password.';
                         errorDiv.classList.add('show');
+                        console.warn('Login failed:', res.message);
+                        return;
+                    }
+                    
+                    // Validate response structure
+                    if (!res.data || !res.data.token || !res.data.user || !res.data.household) {
+                        errorDiv.textContent = 'Server error: incomplete response. Contact administrator.';
+                        errorDiv.classList.add('show');
+                        console.error('Invalid response structure:', res);
                         return;
                     }
                     
@@ -1162,6 +1197,8 @@
                     sessionStorage.setItem('gea_user', JSON.stringify(currentUser));
                     sessionStorage.setItem('gea_household', JSON.stringify(currentHousehold));
                     
+                    console.log('Login successful. Token:', currentToken.substring(0, 20) + '...');
+                    
                     // Show authenticated UI and load dashboard
                     showAuthenticatedUI();
                     loadDashboard();
@@ -1169,7 +1206,7 @@
                 .catch(function(err) {
                     submitButton.disabled = false;
                     submitButton.textContent = 'Sign In';
-                    errorDiv.textContent = 'Connection error. Please try again.';
+                    errorDiv.textContent = 'Connection error: ' + err.message + '. Please check your connection and try again.';
                     errorDiv.classList.add('show');
                     console.error('Login error:', err);
                 });
