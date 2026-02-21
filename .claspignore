@@ -1,0 +1,9 @@
+**/.git/**
+.gitignore
+.clasp.json
+*.md
+*.bak
+*.js
+0*.html
+.DS_Store
+node_modules/
