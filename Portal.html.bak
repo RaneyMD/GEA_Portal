@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GEA Member Portal</title>
+  
+  <!-- ============================================================ -->
+  <!-- FONTS: Source Sans 3 for UI, Roboto Mono for data display   -->
+  <!-- ============================================================ -->
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- intl-tel-input CSS and JS for international phone input -->
+  <link rel="stylesheet" 
+      href="https://cdn.jsdelivr.net/npm/intl-tel-input@26.0.6/build/css/intlTelInput.css">
+  <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@26.0.6/build/js/intlTelInput.min.js"></script>
+
+  <style>
+    /* ============================================================ */
+    /* RESET AND DEFAULTS                                           */
+    /* ============================================================ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    html, body {
+      height: 100%;
+      font-family: 'Source Sans 3', 'Segoe UI', Arial, sans-serif;
+      font-size: 14px;
+      color: #333333;
+      background: #F5F5F5;
+    }
+    
+    /* ============================================================ */
+    /* COLOR CONSTANTS (from Config.gs)                             */
+    /* ============================================================ */
+    :root {
+      --color-primary: #0A3161;
+      --color-accent: #B31942;
+      --color-white: #FFFFFF;
+      --color-secondary-blue: #ABCAE9;
+      --color-black: #000000;
+      --color-success: #2E7D32;
+      --color-warning: #E65100;
+      --color-danger: #C62828;
+      --color-info: #1565C0;
+      --color-light-gray: #F5F5F5;
+      --color-medium-gray: #757575;
+      --color-border-gray: #E0E0E0;
+    }
+    
+    /* ============================================================ */
+    /* APP LAYOUT                                                   */
+    /* Flex column: header at top, centered content below           */
+    /* ============================================================ */
+    
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    
+    #header {
+      background: var(--color-primary);
+      border-bottom: 4px solid var(--color-accent);
+      color: var(--color-white);
+      padding: 0 24px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      flex-shrink: 0;
+    }
+    
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .header-logo {
+      width: 40px;
+      height: 40px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 18px;
+    }
+    
+    .header-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    
+    .header-user {
+      font-size: 12px;
+      text-align: right;
+    }
+    
+    .header-user-name {
+      font-weight: 600;
+      font-size: 13px;
+    }
+    
+    .header-user-role {
+      font-size: 11px;
+      opacity: 0.85;
+    }
+    
+    /* ============================================================ */
+    /* LOGIN SCREEN                                                 */
+    /* Centered form shown when no token                            */
+    /* ============================================================ */
+    
+    #loginScreen {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary-blue) 100%);
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+    
+    #loginScreen.show {
+      display: flex;
+    }
+    
+    .login-card {
+      background: var(--color-white);
+      border-radius: 8px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      padding: 40px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    
+    .login-logo {
+      width: 80px;
+      height: 80px;
+      background: var(--color-primary);
+      border-radius: 50%;
+      margin: 0 auto 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-white);
+      font-size: 36px;
+      font-weight: 700;
+    }
+    
+    .login-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--color-primary);
+      margin-bottom: 8px;
+    }
+    
+    .login-subtitle {
+      font-size: 13px;
+      color: var(--color-medium-gray);
+      margin-bottom: 24px;
+    }
+    
+    .login-form {
+      margin-bottom: 20px;
+    }
+    
+    .form-group {
+      margin-bottom: 16px;
+      text-align: left;
+    }
+    
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #555555;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .form-input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1px solid var(--color-border-gray);
+      border-radius: 4px;
+      font-family: 'Source Sans 3', sans-serif;
+    }
+    
+    .form-input:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px rgba(10,49,97,0.15);
+    }
+    
+    .login-error {
+      display: none;
+      background: #FFEBEE;
+      border: 2px solid var(--color-danger);
+      color: var(--color-danger);
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    
+    .login-error.show {
+      display: block;
+    }
+    
+    /* ============================================================ */
+    /* BUTTONS                                                      */
+    /* ============================================================ */
+    
+    button, .btn {
+      border: none;
+      border-radius: 4px;
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: 'Source Sans 3', sans-serif;
+    }
+    
+    .btn-primary {
+      background: var(--color-primary);
+      color: var(--color-white);
+    }
+    
+    .btn-primary:hover:not(:disabled) {
+      background: #0D3D7A;
+    }
+    
+    .btn-primary:disabled {
+      background: var(--color-secondary-blue);
+      cursor: not-allowed;
+    }
+    
+    .btn-danger {
+      background: var(--color-danger);
+      color: var(--color-white);
+    }
+    
+    .btn-danger:hover:not(:disabled) {
+      background: #B71C1C;
+    }
+    
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--color-primary);
+      color: var(--color-primary);
+    }
+    
+    .btn-secondary:hover:not(:disabled) {
+      background: #EFF6FF;
+    }
+    
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    
+    .btn-logout {
+      background: var(--color-accent);
+      color: var(--color-white);
+      padding: 8px 14px;
+      font-size: 12px;
+    }
+    
+    .btn-logout:hover {
+      background: #A01436;
+    }
+    
+    /* ============================================================ */
+    /* MAIN CONTENT AREA                                            */
+    /* Centered column layout with max-width                        */
+    /* ============================================================ */
+    
+    #content {
+      flex: 1;
+      background: var(--color-light-gray);
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      justify-content: center;
+    }
+    
+    .content-column {
+      width: 100%;
+      max-width: 700px;
+    }
+    
+    .page {
+      display: none;
+    }
+    
+    .page.active {
+      display: block;
+    }
+    
+    /* ============================================================ */
+    /* PAGE ELEMENTS                                                */
+    /* ============================================================ */
+    
+    .page-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--color-primary);
+      margin-bottom: 24px;
+    }
+    
+    .section-heading {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-primary);
+      margin-bottom: 12px;
+      margin-top: 20px;
+    }
+    
+    .card {
+      background: var(--color-white);
+      border: 1px solid var(--color-border-gray);
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+    
+    .card-header {
+      border-top: 4px solid var(--color-primary);
+      margin: -20px -24px 16px -24px;
+      padding: 16px 24px;
+      background: #FAFAFA;
+    }
+    
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-primary);
+      margin: 0;
+    }
+    
+    /* ============================================================ */
+    /* STATUS BADGES                                                */
+    /* ============================================================ */
+    
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .badge-pending {
+      background: #FFF3E0;
+      color: var(--color-warning);
+      border: 1px solid #FFE0B2;
+    }
+    
+    .badge-confirmed {
+      background: #E3F2FD;
+      color: #1565C0;
+      border: 1px solid #BBDEFB;
+    }
+    
+    .badge-approved {
+      background: #E8F5E9;
+      color: var(--color-success);
+      border: 1px solid #C8E6C9;
+    }
+    
+    .badge-cancelled {
+      background: #FFEBEE;
+      color: var(--color-danger);
+      border: 1px solid #FFCDD2;
+    }
+    
+    /* ============================================================ */
+    /* INFO / WARNING / SUCCESS BOXES                               */
+    /* ============================================================ */
+    
+    .info-box {
+      background: #EFF6FF;
+      border-left: 5px solid var(--color-primary);
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    
+    .warning-box {
+      background: #FFF0F3;
+      border: 2px solid var(--color-accent);
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: var(--color-accent);
+      font-weight: 600;
+    }
+    
+    .success-box {
+      background: #F1F8E9;
+      border-left: 5px solid var(--color-success);
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    
+    /* ============================================================ */
+    /* DETAIL ROWS                                                  */
+    /* Two-column layout for displaying data                        */
+    /* ============================================================ */
+    
+    .detail-row {
+      display: flex;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--color-border-gray);
+    }
+    
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+    
+    .detail-label {
+      font-weight: 600;
+      width: 120px;
+      color: var(--color-medium-gray);
+      flex-shrink: 0;
+    }
+    
+    .detail-value {
+      flex: 1;
+      color: #333333;
+    }
+    
+    /* ============================================================ */
+    /* TABLES                                                       */
+    /* ============================================================ */
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--color-white);
+      border: 1px solid var(--color-border-gray);
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+    }
+    
+    thead {
+      background: var(--color-primary);
+      color: var(--color-white);
+    }
+    
+    th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #F0F0F0;
+    }
+    
+    tbody tr:hover {
+      background: #EFF6FF;
+    }
+    
+    /* ============================================================ */
+    /* EMPTY STATE                                                  */
+    /* ============================================================ */
+    
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--color-medium-gray);
+    }
+    
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+    
+    .empty-state-text {
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    
+    /* ============================================================ */
+    /* RESPONSIVE ADJUSTMENTS                                       */
+    /* ============================================================ */
+    
+    @media (max-width: 768px) {
+      #header {
+        padding: 0 16px;
+        height: 56px;
+      }
+      
+      #content {
+        padding: 16px;
+      }
+      
+      .content-column {
+        max-width: 100%;
+      }
+      
+      .detail-row {
+        flex-direction: column;
+      }
+      
+      .detail-label {
+        width: auto;
+        margin-bottom: 4px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- APP STRUCTURE                                                -->
+<!-- Main container for login and authenticated app               -->
+<!-- ============================================================ -->
+
+<div id="app">
+  
+<!-- ============================================================ -->
+<!-- LOGIN SCREEN                                                 -->
+<!-- Shown when no valid token is found.                          -->
+<!-- Now requires both email and password for authentication.     -->
+<!-- ============================================================ -->
+
+<div id="loginScreen" class="show">
+  <div class="login-card">
+    <div class="login-logo">GEA</div>
+    <h1 class="login-title">GEA Member Portal</h1>
+    <p class="login-subtitle">Sign in with your GEA account</p>
+    <div class="login-error" id="loginError"></div>
+    <form class="login-form" onsubmit="submitLogin(event)">
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" id="loginEmail" class="form-input" placeholder="you@state.gov" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="loginPassword" class="form-input" placeholder="••••••••••••" required minlength="12">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%;">Sign In</button>
+    </form>
+    <p style="font-size: 12px; color: #999; margin-top: 16px;">
+      Passwords must be at least 12 characters.
+    </p>
+  </div>
+</div> 
+
+
+  <!-- ============================================================ -->
+  <!-- MAIN APP (shown after authentication)                        -->
+  <!-- ============================================================ -->
+  
+  <!-- ============================================================ -->
+  <!-- HEADER / NAV BAR                                             -->
+  <!-- Logo, title, and user menu                                  -->
+  <!-- ============================================================ -->
+  <header id="header" style="display: none;">
+    <div class="header-left">
+      <div class="header-logo">GEA</div>
+      <div class="header-title">Member Portal</div>
+    </div>
+    <div class="header-right">
+      <div class="header-user">
+        <div class="header-user-name" id="headerUserName">Member</div>
+        <div class="header-user-role">Household</div>
+      </div>
+      <button class="btn-logout" onclick="logout();">Logout</button>
+    </div>
+  </header>
+  
+  <!-- ============================================================ -->
+  <!-- CONTENT AREA                                                -->
+  <!-- All page views contained within                             -->
+  <!-- ============================================================ -->
+  <div id="content" style="display: none;">
+    <div class="content-column">
+      
+      <!-- ========================================================== -->
+      <!-- PAGE: DASHBOARD                                            -->
+      <!-- Member's home page with overview and quick links           -->
+      <!-- ========================================================== -->
+      <div id="dashboard" class="page active">
+        <h1 class="page-title">Dashboard</h1>
+        
+        <!-- Membership Status -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Membership Status</h2>
+          </div>
+          <div id="membershipStatus">
+            <p style="text-align: center; color: #999; padding: 20px;">Loading...</p>
+          </div>
+        </div>
+        
+        <!-- Household Members -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Household Members</h2>
+          </div>
+          <div id="householdMembers">
+            <p style="text-align: center; color: #999; padding: 20px;">Loading...</p>
+          </div>
+        </div>
+        
+        <!-- Upcoming Reservations -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Upcoming Reservations</h2>
+          </div>
+          <div id="upcomingReservations">
+            <div class="empty-state">
+              <div class="empty-state-icon">📅</div>
+              <div class="empty-state-text">No upcoming reservations</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="info-box">
+          💡 <strong>Quick Links:</strong> Need to book a facility? Visit the <a href="#" onclick="showPage('reservations'); return false;" style="color: var(--color-primary); text-decoration: underline;">Reservations</a> page. Want to update your info? Go to <a href="#" onclick="showPage('profile'); return false;" style="color: var(--color-primary); text-decoration: underline;">Profile</a>.
+        </div>
+      </div>
+      
+      <!-- ========================================================== -->
+      <!-- PAGE: RESERVATIONS                                         -->
+      <!-- Book, view, and cancel facility reservations              -->
+      <!-- ========================================================== -->
+      <div id="reservations" class="page">
+        <h1 class="page-title">Reservations</h1>
+        
+        <!-- Book New Reservation -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Book a New Reservation</h2>
+          </div>
+          <form onsubmit="submitReservation(event)">
+            <div class="form-group">
+              <label class="form-label">Facility</label>
+              <select id="facility" class="form-input" required>
+                <option value="">-- Select a facility --</option>
+                <option value="Tennis Courts">Tennis Courts</option>
+                <option value="Leobo Lodge">Leobo Lodge</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Event Date</label>
+              <input type="date" id="eventDate" class="form-input" required>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div class="form-group">
+                <label class="form-label">Start Time</label>
+                <input type="time" id="startTime" class="form-input" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">End Time</label>
+                <input type="time" id="endTime" class="form-input" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Event Name</label>
+              <input type="text" id="eventName" class="form-input" placeholder="e.g., Birthday Party" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">
+                <input type="checkbox" id="hasGuests">
+                I will have guests
+              </label>
+            </div>
+            <div id="guestCountDiv" style="display: none;">
+              <div class="form-group">
+                <label class="form-label">Number of Guests</label>
+                <input type="number" id="guestCount" class="form-input" min="0">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">
+                <input type="checkbox" id="noFundraising" checked>
+                No fundraising or commercial activity
+              </label>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Submit Reservation</button>
+          </form>
+        </div>
+        
+        <!-- Your Reservations -->
+        <h2 class="section-heading">Your Reservations</h2>
+        <div id="reservationsList" class="card">
+          <div class="empty-state">
+            <div class="empty-state-icon">📋</div>
+            <div class="empty-state-text">No reservations yet</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- ========================================================== -->
+      <!-- PAGE: PROFILE                                              -->
+      <!-- View and edit member profile information                  -->
+      <!-- ========================================================== -->
+      <div id="profile" class="page">
+        <h1 class="page-title">Profile</h1>
+
+<!-- ============================================================ -->
+<!-- PHONE NUMBER EDIT FORM                                        -->
+<!-- Uses intl-tel-input for elegant international phone handling  -->
+<!-- ============================================================ -->
+
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Phone Numbers</h2>
+  </div>
+  
+  <!-- Primary Phone -->
+  <div style="padding: 20px;">
+    <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">Primary Phone</h3>
+    
+    <div class="form-group">
+      <label class="form-label">Phone Number</label>
+      <input id="phonePrimary" 
+             type="tel" 
+             class="form-input" 
+             placeholder="Enter your phone number">
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" id="phonePrimaryWhatsApp">
+        This number is on WhatsApp
+      </label>
+    </div>
+    
+    <!-- Hidden fields to store extracted country code and phone -->
+    <input type="hidden" id="countryCodePrimary" value="">
+    <input type="hidden" id="phoneNumberPrimary" value="">
+    
+    <!-- Secondary Phone (optional) -->
+    <h3 style="font-size: 14px; font-weight: 600; margin: 20px 0 12px 0;">Secondary Phone (Optional)</h3>
+    
+    <div class="form-group">
+      <label class="form-label">Phone Number</label>
+      <input id="phoneSecondary" 
+             type="tel" 
+             class="form-input" 
+             placeholder="Enter your phone number">
+    </div>
+    
+    <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" id="phoneSecondaryWhatsApp">
+        This number is on WhatsApp
+      </label>
+    </div>
+    
+    <!-- Hidden fields to store extracted country code and phone -->
+    <input type="hidden" id="countryCodeSecondary" value="">
+    <input type="hidden" id="phoneNumberSecondary" value="">
+    
+    <!-- Save Button -->
+    <button type="button" 
+            class="btn btn-primary" 
+            onclick="savePhoneNumbers()"
+            style="margin-top: 16px;">
+      Save Phone Numbers
+    </button>
+    
+    <div id="phoneMessage" 
+         style="margin-top: 12px; padding: 12px; border-radius: 4px; 
+                font-size: 13px; display: none;"></div>
+  </div>
+</div>
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Personal Information</h2>
+          </div>
+          <div id="profileContent">
+            <p style="text-align: center; color: #999; padding: 20px;">Loading...</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- ========================================================== -->
+      <!-- PAGE: CARD                                                 -->
+      <!-- Digital membership card display                            -->
+      <!-- ========================================================== -->
+      <div id="card" class="page">
+        <h1 class="page-title">Digital Membership Card</h1>
+        
+        <div id="cardContent">
+          <p style="text-align: center; color: #999; padding: 20px;">Loading...</p>
+        </div>
+      </div>
+      
+      <!-- ========================================================== -->
+      <!-- PAGE: PAYMENT                                              -->
+      <!-- Submit payment confirmation                               -->
+      <!-- ========================================================== -->
+      <div id="payment" class="page">
+        <h1 class="page-title">Submit Payment</h1>
+        
+        <div class="info-box">
+          📧 Payment submissions are verified by the board. You'll receive email confirmation once your payment is confirmed.
+        </div>
+        
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Payment Information</h2>
+          </div>
+          <form onsubmit="submitPayment(event)">
+            <div class="form-group">
+              <label class="form-label">Payment Method</label>
+              <select id="paymentMethod" class="form-input" required>
+                <option value="">-- Select payment method --</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Cash">Cash</option>
+                <option value="Check">Check</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Payment Reference</label>
+              <input type="text" id="paymentReference" class="form-input" placeholder="e.g., Receipt number, transaction ID" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Payment Date</label>
+              <input type="date" id="paymentDate" class="form-input" required>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <div class="form-group">
+                <label class="form-label">Amount (USD)</label>
+                <input type="number" id="amountUSD" class="form-input" min="0" step="0.01" placeholder="0.00">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Amount (BWP)</label>
+                <input type="number" id="amountBWP" class="form-input" min="0" step="0.01" placeholder="0.00">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Notes (optional)</label>
+              <textarea id="paymentNotes" class="form-input" placeholder="Any additional information..." style="resize: vertical; min-height: 80px;"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Submit Payment</button>
+          </form>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+</div>
+
+<script>
+  // ============================================================ //
+  // SECTION: INITIALIZATION AND STATE                            //
+  // ============================================================ //
+  
+  // The backend API URL is injected when this file is served via Apps Script
+  var PORTAL_API_URL = 'https://script.google.com/a/macros/geabotswana.org/s/AKfycbxwfTq2uKHTXOdE6pG_slhCT4ka5Q0tY7f3pOTTaMwJPC55avD1OPSLANlM0fzR8cMhrg/exec';
+
+  // Current authentication token
+  var currentToken = sessionStorage.getItem('gea_token') || null;
+  
+  // Current user's email and role
+  var currentUser = null;
+  
+  /**
+   * Initialize the member portal when the page loads.
+   * Check for existing session token; show login or dashboard accordingly.
+   */
+  window.addEventListener('load', function() {
+    if (currentToken) {
+      showAuthenticatedUI();
+      loadDashboard();
+    } else {
+      document.getElementById('loginScreen').classList.add('show');
+    }
+  });
+  
+// ============================================================
+// SECTION: PHONE NUMBER INPUT WITH intl-tel-input
+// ============================================================
+// Initializes intl-tel-input on phone input fields for elegant
+// international phone number handling. Allows users to select
+// their country via flag dropdown and validates format.
+// ============================================================
+
+// Global variables to hold intl-tel-input instances
+var iti_primary = null;
+var iti_secondary = null;
+
+/**
+ * Initializes intl-tel-input on phone input fields.
+ * Called when profile page loads.
+ * Sets up flag dropdown, auto-formatting, validation.
+ */
+function initPhoneInputs() {
+  // Initialize Primary Phone Input
+  var inputPrimary = document.querySelector("#phonePrimary");
+  if (inputPrimary) {
+    iti_primary = window.intlTelInput(inputPrimary, {
+      initialCountry: "bw",
+      preferredCountries: ["bw", "us", "gb", "za"],
+      allowDropdown: true,
+      formatAsYouType: true,
+      placeholderNumberType: "MOBILE",
+      loadUtils: () => import("https://cdn.jsdelivr.net/npm/intl-tel-input@26.0.6/build/js/utils.js"),
+    });
+    
+    // Update hidden fields immediately
+    updatePhoneFields("primary");
+    
+    // Listen for country change
+    inputPrimary.addEventListener("countrychange", function() {
+      console.log("Country changed - updating fields");
+      updatePhoneFields("primary");
+    });
+    
+    // Listen for input change
+    inputPrimary.addEventListener("input", function() {
+      console.log("Input changed - updating fields");
+      updatePhoneFields("primary");
+    });
+  }
+  
+  // Initialize Secondary Phone Input (same pattern)
+  var inputSecondary = document.querySelector("#phoneSecondary");
+  if (inputSecondary) {
+    iti_secondary = window.intlTelInput(inputSecondary, {
+      initialCountry: "bw",
+      preferredCountries: ["bw", "us", "gb", "za"],
+      allowDropdown: true,
+      formatAsYouType: true,
+      placeholderNumberType: "MOBILE",
+      loadUtils: () => import("https://cdn.jsdelivr.net/npm/intl-tel-input@26.0.6/build/js/utils.js"),
+    });
+    
+    updatePhoneFields("secondary");
+    
+    inputSecondary.addEventListener("countrychange", function() {
+      console.log("Country changed - updating fields");
+      updatePhoneFields("secondary");
+    });
+    
+    inputSecondary.addEventListener("input", function() {
+      console.log("Input changed - updating fields");
+      updatePhoneFields("secondary");
+    });
+  }
+}
+
+/**
+ * Extracts country code and phone number from intl-tel-input
+ * and stores in hidden fields for form submission.
+ * 
+ * @param {string} fieldType  "primary" or "secondary"
+ */
+function updatePhoneFields(fieldType) {
+  var iti = fieldType === "primary" ? iti_primary : iti_secondary;
+  if (!iti) {
+    console.log("intl-tel-input not initialized for " + fieldType);
+    return;
+  }
+  
+  // Get the selected country's data
+  var countryData = iti.getSelectedCountryData();
+  if (!countryData || !countryData.iso2) {
+    console.log("No country selected");
+    return;
+  }
+  
+  // Get the raw input element value (what user typed)
+  var inputElement = document.querySelector("#phone" + capitalizeFirst(fieldType));
+  var rawValue = inputElement.value;
+  
+  if (!rawValue) {
+    console.log("No input value");
+    return;
+  }
+  
+  // Extract just the digits from what user typed
+  var cleanNumber = rawValue.replace(/[^\d]/g, "");
+  
+  // Store in hidden fields
+  var ccField = document.querySelector("#countryCode" + capitalizeFirst(fieldType));
+  var phoneField = document.querySelector("#phoneNumber" + capitalizeFirst(fieldType));
+  
+  if (ccField && phoneField) {
+    ccField.value = countryData.iso2.toUpperCase();
+    phoneField.value = cleanNumber;
+    console.log("Updated " + fieldType + " | Country: " + countryData.iso2.toUpperCase() + 
+                " | Phone: " + cleanNumber);
+  }
+}
+
+// Helper function to capitalize first letter
+function capitalizeFirst(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+/**
+ * Saves phone numbers to the backend via API call.
+ * Validates data before sending, shows success/error message.
+ */
+function savePhoneNumbers() {
+  // Get values from hidden fields (populated by intl-tel-input)
+  var countryCodePrimary = document.querySelector("#countryCodePrimary").value;
+  var phoneNumberPrimary = document.querySelector("#phoneNumberPrimary").value;
+  var phonePrimaryWhatsApp = document.querySelector("#phonePrimaryWhatsApp").checked;
+  
+  var countryCodeSecondary = document.querySelector("#countryCodeSecondary").value;
+  var phoneNumberSecondary = document.querySelector("#phoneNumberSecondary").value;
+  var phoneSecondaryWhatsApp = document.querySelector("#phoneSecondaryWhatsApp").checked;
+  
+  // Validate primary phone is provided
+  if (!countryCodePrimary || !phoneNumberPrimary) {
+    showPhoneMessage("Please enter your primary phone number.", "error");
+    return;
+  }
+  
+  // Show loading state
+  var btn = document.querySelector('button[onclick="savePhoneNumbers()"]');
+  var originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+  
+  // Call backend API to save phone numbers
+  apiCall("updatePhoneNumbers", {
+    country_code_primary: countryCodePrimary,
+    phone_primary: phoneNumberPrimary,
+    phone_primary_whatsapp: phonePrimaryWhatsApp,
+    country_code_secondary: countryCodeSecondary,
+    phone_secondary: phoneNumberSecondary,
+    phone_secondary_whatsapp: phoneSecondaryWhatsApp
+  }).then(function(res) {
+    btn.disabled = false;
+    btn.textContent = originalText;
+    
+    if (!res.success) {
+      showPhoneMessage("Error: " + res.message, "error");
+      return;
+    }
+    
+    showPhoneMessage("✓ Phone numbers saved successfully!", "success");
+    
+    // Reload profile data after save
+    setTimeout(function() {
+      loadProfile();
+    }, 1000);
+    
+  }).catch(function(err) {
+    btn.disabled = false;
+    btn.textContent = originalText;
+    showPhoneMessage("Connection error. Please try again.", "error");
+    console.error("Phone save error:", err);
+  });
+}
+
+/**
+ * Displays a success or error message below the phone form.
+ * 
+ * @param {string} message  Message text to display
+ * @param {string} type     "success" or "error"
+ */
+function showPhoneMessage(message, type) {
+  var msgDiv = document.querySelector("#phoneMessage");
+  if (!msgDiv) return;
+  
+  msgDiv.textContent = message;
+  msgDiv.style.display = "block";
+  
+  if (type === "success") {
+    msgDiv.style.background = "#F1F8E9";
+    msgDiv.style.borderLeft = "5px solid #2E7D32";
+    msgDiv.style.color = "#2E7D32";
+  } else {
+    msgDiv.style.background = "#FFEBEE";
+    msgDiv.style.borderLeft = "5px solid #C62828";
+    msgDiv.style.color = "#C62828";
+  }
+}
+
+// Initialize phone inputs when profile page loads
+// Add to the loadProfile() function:
+// (At the end of loadProfile(), after rendering, add:)
+// setTimeout(function() { initPhoneInputs(); }, 500);
+
+  // ============================================================ //
+  // SECTION: AUTHENTICATION                                      //
+  // ============================================================ //
+  
+/**
+ * Submits the login form to authenticate the user.
+ * Now requires both email and password.
+ * Calls the backend login action with both credentials.
+ * On success, stores the session token and shows the member interface.
+ * On failure, displays an error message below the login form.
+ */
+function submitLogin(event) {
+  event.preventDefault();
+  
+  // Get email and password from the form
+  var email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  var password = document.getElementById('loginPassword').value;
+  
+  // Clear any previous error messages
+  var errorDiv = document.getElementById('loginError');
+  errorDiv.textContent = '';
+  errorDiv.classList.remove('show');
+  
+  // Validate password length on the frontend (user-friendly error)
+  if (password.length < 12) {
+    errorDiv.textContent = 'Password must be at least 12 characters.';
+    errorDiv.classList.add('show');
+    return;
+  }
+  
+  // Disable the submit button while the request is in progress
+  var submitBtn = event.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Signing in...';
+  
+  // Call the backend login action with BOTH email and password
+  apiCall('login', { 
+    email: email,
+    password: password  // ← NEW: password is now sent
+  }).then(function(res) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Sign In';
+    
+    console.log("LOGIN RESPONSE:", res);
+    
+    if (!res.success) {
+      // Login failed — show error message
+      // Generic message for security (don't reveal if email/password/status is wrong)
+      errorDiv.textContent = res.message || 'Invalid email or password.';
+      errorDiv.classList.add('show');
+      return;
+    }
+    
+    // Login successful — store the token and show the app
+    currentToken = res.data.token;
+    currentUser = res.data;
+    sessionStorage.setItem('gea_token', currentToken);
+    
+    // Hide login and show the authenticated interface
+    document.getElementById('loginScreen').classList.remove('show');
+    showAuthenticatedUI();
+    loadDashboard();
+  }).catch(function(err) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Sign In';
+    errorDiv.textContent = 'Connection error. Please try again.';
+    errorDiv.classList.add('show');
+    console.error('Login error:', err);
+  });
+} 
+
+  /**
+   * Shows the authenticated member interface (header, content).
+   * Sets the user's name in the header.
+   */
+  function showAuthenticatedUI() {
+    // Hide login screen
+    document.getElementById('loginScreen').classList.remove('show');
+    
+    // Show header and content
+    document.getElementById('header').style.display = 'flex';
+    document.getElementById('content').style.display = 'flex';
+    
+    // Set the user's name in the header
+    if (currentUser && currentUser.email) {
+      document.getElementById('headerUserName').textContent = currentUser.email.split('@')[0];
+    }
+  }
+  
+  /**
+   * Logs out the current user.
+   * Clears the session token and returns to the login screen.
+   */
+  function logout() {
+    sessionStorage.removeItem('gea_token');
+    currentToken = null;
+    currentUser = null;
+    
+    // Hide authenticated UI
+    document.getElementById('header').style.display = 'none';
+    document.getElementById('content').style.display = 'none';
+    
+    // Show and reset login screen
+    document.getElementById('loginScreen').classList.add('show');
+    document.getElementById('loginEmail').value = '';
+    document.getElementById('loginError').textContent = '';
+    document.getElementById('loginError').classList.remove('show');
+  }
+  
+  // ============================================================ //
+  // SECTION: API COMMUNICATION                                   //
+  // ============================================================ //
+  
+  /**
+   * Makes an API call to the backend Apps Script deployment.
+   * Automatically appends the action and session token to the request.
+   */
+  function apiCall(action, params) {
+    params = params || {};
+    params.action = action;
+    params.token = currentToken || '';
+    
+    // Construct the URL with query parameters
+    var url = PORTAL_API_URL + '?' + new URLSearchParams(params).toString();
+    
+    // Make the fetch request to the backend
+    return fetch(url).then(function(r) {
+      return r.json();
+    });
+  }
+  
+  // ============================================================ //
+  // SECTION: PAGE NAVIGATION                                     //
+  // ============================================================ //
+  
+  /**
+   * Switches to a different member page (dashboard, reservations, etc.).
+   * Hides all pages except the one specified and loads fresh data.
+   */
+  function showPage(pageName) {
+    // Hide all pages
+    var pages = document.querySelectorAll('.page');
+    pages.forEach(function(page) {
+      page.classList.remove('active');
+    });
+    
+    // Show the requested page
+    var targetPage = document.getElementById(pageName);
+    if (targetPage) {
+      targetPage.classList.add('active');
+    }
+    
+    // Load data for the requested page
+    switch (pageName) {
+      case 'dashboard':
+        loadDashboard();
+        break;
+      case 'reservations':
+        loadReservations();
+        break;
+      case 'profile':
+        loadProfile();
+        break;
+      case 'card':
+        loadCard();
+        break;
+      case 'payment':
+        // Payment page doesn't need to load data
+        break;
+    }
+    
+    // Scroll to top
+    window.scrollTo(0, 0);
+  }
+  
+  // ============================================================ //
+  // SECTION: DASHBOARD                                           //
+  // ============================================================ //
+  
+  /**
+   * Loads the dashboard with membership status and household info.
+   */
+  function loadDashboard() {
+    apiCall('dashboard', {}).then(function(res) {
+      if (!res.success) {
+        showError('Failed to load dashboard: ' + res.message);
+        return;
+      }
+      
+      var data = res.data;
+      var hh = data.household;
+      
+      // Membership Status
+      var statusHtml = '<div class="detail-row">' +
+        '<div class="detail-label">Household:</div>' +
+        '<div class="detail-value">' + (hh ? hh.household_name : 'Unknown') + '</div>' +
+        '</div>' +
+        '<div class="detail-row">' +
+        '<div class="detail-label">Status:</div>' +
+        '<div class="detail-value"><span class="badge badge-' + (hh && hh.active ? 'approved' : 'cancelled') + '">' + (hh && hh.active ? 'ACTIVE' : 'INACTIVE') + '</span></div>' +
+        '</div>' +
+        '<div class="detail-row">' +
+        '<div class="detail-label">Expires:</div>' +
+        '<div class="detail-value">' + (hh ? hh.membership_expiration_date : 'N/A') + '</div>' +
+        '</div>';
+      
+      document.getElementById('membershipStatus').innerHTML = statusHtml;
+      
+      // Household Members
+      var members = data.members || [];
+      var membersHtml = '';
+      if (members.length === 0) {
+        membersHtml = '<p style="text-align: center; color: #999; padding: 20px;">No members listed</p>';
+      } else {
+        membersHtml = '<table><thead><tr><th>Name</th><th>Relationship</th><th>Status</th></tr></thead><tbody>';
+        members.forEach(function(m) {
+          membersHtml += '<tr>' +
+            '<td>' + m.first_name + ' ' + m.last_name + '</td>' +
+            '<td>' + (m.relationship_to_primary || 'N/A') + '</td>' +
+            '<td><span class="badge badge-' + (m.photo_status === 'APPROVED' ? 'approved' : 'pending') + '">' + (m.photo_status || 'PENDING') + '</span></td>' +
+            '</tr>';
+        });
+        membersHtml += '</tbody></table>';
+      }
+      document.getElementById('householdMembers').innerHTML = membersHtml;
+      
+      // Upcoming Reservations
+      var upcoming = data.reservations || [];
+      var upcomingHtml = '';
+      if (upcoming.length === 0) {
+        upcomingHtml = '<div class="empty-state">' +
+          '<div class="empty-state-icon">📅</div>' +
+          '<div class="empty-state-text">No upcoming reservations</div>' +
+          '</div>';
+      } else {
+        upcomingHtml = '<table><thead><tr><th>Date</th><th>Facility</th><th>Status</th></tr></thead><tbody>';
+        upcoming.forEach(function(res) {
+          upcomingHtml += '<tr>' +
+            '<td>' + res.event_date + '</td>' +
+            '<td>' + res.facility + '</td>' +
+            '<td><span class="badge badge-' + (res.status === 'STATUS_CONFIRMED' ? 'confirmed' : 'pending') + '">' + res.status + '</span></td>' +
+            '</tr>';
+        });
+        upcomingHtml += '</tbody></table>';
+      }
+      document.getElementById('upcomingReservations').innerHTML = upcomingHtml;
+    });
+  }
+  
+  // ============================================================ //
+  // SECTION: RESERVATIONS                                        //
+  // ============================================================ //
+  
+  /**
+   * Shows the reservations page and loads member's reservation history.
+   */
+  function loadReservations() {
+    // Load the member's past and current reservations
+    apiCall('reservations', {}).then(function(res) {
+      if (!res.success) {
+        showError('Failed to load reservations: ' + res.message);
+        return;
+      }
+      
+      var reservations = res.data.reservations || [];
+      var html = '';
+      
+      if (reservations.length === 0) {
+        html = '<div class="empty-state">' +
+          '<div class="empty-state-icon">📋</div>' +
+          '<div class="empty-state-text">No reservations yet</div>' +
+          '</div>';
+      } else {
+        html = '<table><thead><tr><th>Date</th><th>Facility</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+        reservations.forEach(function(res) {
+          var canCancel = res.status === 'STATUS_PENDING' || res.status === 'STATUS_CONFIRMED';
+          html += '<tr>' +
+            '<td>' + res.event_date + '</td>' +
+            '<td>' + res.facility + '</td>' +
+            '<td><span class="badge badge-' + (res.status === 'STATUS_CONFIRMED' ? 'confirmed' : (res.status === 'STATUS_PENDING' ? 'pending' : 'cancelled')) + '">' + res.status + '</span></td>' +
+            '<td>' + (canCancel ? '<button class="btn btn-danger btn-small" onclick="cancelReservation(\'' + res.reservation_id + '\');">Cancel</button>' : '—') + '</td>' +
+            '</tr>';
+        });
+        html += '</tbody></table>';
+      }
+      
+      document.getElementById('reservationsList').innerHTML = html;
+    });
+  }
+  
+  /**
+   * Submits a new reservation request.
+   */
+  function submitReservation(event) {
+    event.preventDefault();
+    
+    var facility = document.getElementById('facility').value;
+    var eventDate = document.getElementById('eventDate').value;
+    var startTime = document.getElementById('startTime').value;
+    var endTime = document.getElementById('endTime').value;
+    var eventName = document.getElementById('eventName').value;
+    var hasGuests = document.getElementById('hasGuests').checked;
+    var guestCount = hasGuests ? parseInt(document.getElementById('guestCount').value) || 0 : 0;
+    var noFundraising = document.getElementById('noFundraising').checked;
+    
+    // Calculate duration
+    var start = new Date('2000-01-01T' + startTime);
+    var end = new Date('2000-01-01T' + endTime);
+    var durationHours = (end - start) / (1000 * 60 * 60);
+    
+    var btn = event.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+    
+    apiCall('book', {
+      facility: facility,
+      event_date: eventDate,
+      start_time: eventDate + 'T' + startTime,
+      end_time: eventDate + 'T' + endTime,
+      duration_hours: durationHours,
+      event_name: eventName,
+      has_guests: hasGuests,
+      guest_count: guestCount,
+      no_fundraising: noFundraising
+    }).then(function(res) {
+      btn.disabled = false;
+      btn.textContent = 'Submit Reservation';
+      
+      if (!res.success) {
+        showError('Failed to submit reservation: ' + res.message);
+        return;
+      }
+      
+      // Success — reset form and reload
+      document.querySelector('form').reset();
+      alert('Reservation submitted! Status: ' + res.data.status);
+      loadReservations();
+    });
+  }
+  
+  /**
+   * Cancels a reservation.
+   */
+  function cancelReservation(resId) {
+    if (!confirm('Cancel this reservation?')) return;
+    
+    apiCall('cancel', { reservation_id: resId }).then(function(res) {
+      if (!res.success) {
+        showError('Failed to cancel: ' + res.message);
+        return;
+      }
+      
+      alert('Reservation cancelled');
+      loadReservations();
+    });
+  }
+  
+  /**
+   * Setup guest count field visibility.
+   */
+  document.getElementById('hasGuests').addEventListener('change', function() {
+    document.getElementById('guestCountDiv').style.display = this.checked ? 'block' : 'none';
+  });
+  
+  // ============================================================ //
+  // SECTION: PROFILE                                             //
+  // ============================================================ //
+  
+  /**
+   * Loads and displays the member's profile information.
+   */
+  function loadProfile() {
+    apiCall('profile', {}).then(function(res) {
+      if (!res.success) {
+        showError('Failed to load profile: ' + res.message);
+        return;
+      }
+      
+      var member = res.data.member;
+      var html = '<div class="detail-row">' +
+        '<div class="detail-label">Name:</div>' +
+        '<div class="detail-value">' + member.first_name + ' ' + member.last_name + '</div>' +
+        '</div>' +
+        '<div class="detail-row">' +
+        '<div class="detail-label">Email:</div>' +
+        '<div class="detail-value">' + member.email + '</div>' +
+        '</div>' +
+        '<div class="detail-row">' +
+        '<div class="detail-label">Phone:</div>' +
+        '<div class="detail-value">' + (member.phone || 'Not provided') + '</div>' +
+        '</div>' +
+        '<div class="detail-row">' +
+        '<div class="detail-label">Emergency Contact:</div>' +
+        '<div class="detail-value">' + (member.emergency_contact_name || 'Not provided') + '</div>' +
+        '</div>';
+      
+      document.getElementById('profileContent').innerHTML = html;
+      
+      // ← ADD THIS: Initialize phone inputs after profile is rendered
+      setTimeout(function() {
+        initPhoneInputs();
+        // If member has existing phone, populate it
+        if (member.country_code_primary && member.phone_primary && iti_primary) {
+          var dialCode = window.intlTelInputUtils.getCountryData()
+            .find(c => c.iso2 === member.country_code_primary.toLowerCase()).dialCode;
+          iti_primary.setNumber("+" + dialCode + member.phone_primary);
+          updatePhoneFields("primary");
+        }
+      }, 500);
+    });
+  }
+  
+  // ============================================================ //
+  // SECTION: CARD                                                //
+  // ============================================================ //
+  
+  /**
+   * Loads the digital membership card.
+   */
+  function loadCard() {
+    apiCall('card', {}).then(function(res) {
+      if (!res.success) {
+        showError('Failed to load card: ' + res.message);
+        return;
+      }
+      
+      var cards = res.data.cards || [];
+      var html = '';
+      
+      cards.forEach(function(card) {
+        html += '<div class="card">' +
+          '<div style="background: var(--color-primary); color: white; padding: 16px; border-radius: 6px 6px 0 0; text-align: center;">' +
+          '<div style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">GEA</div>' +
+          '<div style="font-size: 14px; font-weight: 600;">' + card.name + '</div>' +
+          '</div>' +
+          '<div style="padding: 16px;">' +
+          '<div class="detail-row">' +
+          '<div class="detail-label">Status:</div>' +
+          '<div class="detail-value"><span class="badge badge-' + (card.status === 'ACTIVE' ? 'approved' : 'cancelled') + '">' + card.status + '</span></div>' +
+          '</div>' +
+          '<div class="detail-row">' +
+          '<div class="detail-label">Type:</div>' +
+          '<div class="detail-value">' + card.membership_type + '</div>' +
+          '</div>' +
+          '<div class="detail-row">' +
+          '<div class="detail-label">Expires:</div>' +
+          '<div class="detail-value">' + card.expiration_date + '</div>' +
+          '</div>' +
+          '<div class="detail-row">' +
+          '<div class="detail-label">Relationship:</div>' +
+          '<div class="detail-value">' + card.relationship + '</div>' +
+          '</div>' +
+          '</div>' +
+          '</div>';
+      });
+      
+      document.getElementById('cardContent').innerHTML = html;
+    });
+  }
+  
+  // ============================================================ //
+  // SECTION: PAYMENTS                                            //
+  // ============================================================ //
+  
+  /**
+   * Submits a payment confirmation.
+   */
+  function submitPayment(event) {
+    event.preventDefault();
+    
+    var method = document.getElementById('paymentMethod').value;
+    var reference = document.getElementById('paymentReference').value;
+    var date = document.getElementById('paymentDate').value;
+    var amountUSD = parseFloat(document.getElementById('amountUSD').value) || 0;
+    var amountBWP = parseFloat(document.getElementById('amountBWP').value) || 0;
+    var notes = document.getElementById('paymentNotes').value;
+    
+    var btn = event.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+    
+    apiCall('payment', {
+      payment_method: method,
+      payment_reference: reference,
+      payment_date: date,
+      amount_usd: amountUSD,
+      amount_bwp: amountBWP,
+      notes: notes
+    }).then(function(res) {
+      btn.disabled = false;
+      btn.textContent = 'Submit Payment';
+      
+      if (!res.success) {
+        showError('Failed to submit payment: ' + res.message);
+        return;
+      }
+      
+      // Success — reset form
+      document.querySelector('form').reset();
+      var successBox = document.createElement('div');
+      successBox.className = 'success-box';
+      successBox.innerHTML = '✓ Payment submitted successfully! The board will verify and confirm your submission.';
+      document.querySelector('#payment .card').insertAdjacentElement('beforebegin', successBox);
+    });
+  }
+  
+  // ============================================================ //
+  // SECTION: UTILITIES                                           //
+  // ============================================================ //
+  
+  /**
+   * Shows an error message to the user.
+   */
+  function showError(message) {
+    alert('Error: ' + message);
+    console.error(message);
+  }
+</script>
+
+</body>
+</html>

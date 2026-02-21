@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEA Config.gs Image Diagnostic</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #0A3161;
+            margin-bottom: 10px;
+            border-bottom: 4px solid #B31942;
+            padding-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .controls {
+            margin-bottom: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .controls label {
+            margin-right: 20px;
+            font-weight: 600;
+        }
+        
+        .controls input[type="checkbox"] {
+            margin-right: 5px;
+            cursor: pointer;
+        }
+        
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .image-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: box-shadow 0.2s;
+        }
+        
+        .image-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+        
+        .image-card.error {
+            border-left: 5px solid #C62828;
+        }
+        
+        .image-card.success {
+            border-left: 5px solid #2E7D32;
+        }
+        
+        .image-card.loading {
+            border-left: 5px solid #E65100;
+        }
+        
+        .image-preview {
+            width: 100%;
+            height: 200px;
+            background: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #999;
+            overflow: hidden;
+        }
+        
+        .image-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            padding: 10px;
+        }
+        
+        .image-preview.loading::after {
+            content: "Loading...";
+            display: block;
+        }
+        
+        .image-info {
+            padding: 15px;
+        }
+        
+        .constant-name {
+            font-weight: 700;
+            color: #0A3161;
+            margin-bottom: 8px;
+            word-break: break-word;
+            font-size: 13px;
+        }
+        
+        .url-field {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #333;
+            word-break: break-all;
+            max-height: 80px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-badge.ok {
+            background: #E8F5E9;
+            color: #2E7D32;
+            border: 1px solid #C8E6C9;
+        }
+        
+        .status-badge.error {
+            background: #FFEBEE;
+            color: #C62828;
+            border: 1px solid #FFCDD2;
+        }
+        
+        .status-badge.loading {
+            background: #FFF3E0;
+            color: #E65100;
+            border: 1px solid #FFE0B2;
+        }
+        
+        .status-badge.notchecked {
+            background: #F5F5F5;
+            color: #757575;
+            border: 1px solid #E0E0E0;
+        }
+        
+        .error-message {
+            color: #C62828;
+            font-size: 11px;
+            margin-top: 8px;
+            padding: 8px;
+            background: #FFEBEE;
+            border-radius: 3px;
+            border-left: 3px solid #C62828;
+        }
+        
+        .copy-button {
+            background: #0A3161;
+            color: white;
+            border: none;
+            padding: 6px 10px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 8px;
+            transition: background 0.2s;
+        }
+        
+        .copy-button:hover {
+            background: #0D3D7A;
+        }
+        
+        .copy-button:active {
+            opacity: 0.8;
+        }
+        
+        .summary {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .summary-item {
+            text-align: center;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .summary-item.working {
+            background: #E8F5E9;
+        }
+        
+        .summary-item.broken {
+            background: #FFEBEE;
+        }
+        
+        .summary-item.loading {
+            background: #FFF3E0;
+        }
+        
+        .summary-item.unchecked {
+            background: #F5F5F5;
+        }
+        
+        .summary-count {
+            font-size: 28px;
+            font-weight: 700;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .summary-label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #555;
+        }
+        
+        .refresh-button {
+            background: #0A3161;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-right: 10px;
+            transition: background 0.2s;
+        }
+        
+        .refresh-button:hover {
+            background: #0D3D7A;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GEA Config.gs Image Diagnostic</h1>
+        <p class="subtitle">Testing all image URLs defined in Config.gs constants</p>
+        
+        <div class="controls">
+            <button class="refresh-button" onclick="testAllImages()">Test All Images</button>
+            <label>
+                <input type="checkbox" id="showUrlsOnly" onchange="toggleUrlsOnly()">
+                Show URLs Only
+            </label>
+        </div>
+        
+        <div class="summary" id="summary">
+            <div class="summary-item unchecked">
+                <span class="summary-count">—</span>
+                <span class="summary-label">Total</span>
+            </div>
+            <div class="summary-item working">
+                <span class="summary-count" id="countWorking">0</span>
+                <span class="summary-label">Working ✓</span>
+            </div>
+            <div class="summary-item broken">
+                <span class="summary-count" id="countBroken">0</span>
+                <span class="summary-label">Broken ✗</span>
+            </div>
+            <div class="summary-item loading">
+                <span class="summary-count" id="countLoading">0</span>
+                <span class="summary-label">Loading...</span>
+            </div>
+        </div>
+        
+        <div class="image-grid" id="imageGrid">
+            <!-- Images will be populated here by JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        // All image constants from Config.gs
+        // Format: { constantName: url }
+        const imageConstants = {
+            // FAVICON
+            'FAVICON_URL': 'https://drive.google.com/uc?id=1YourFaviconIdHere&export=download',
+            
+            // LOGOS - ROUND
+            'LOGO_ROUND_80_URL': 'https://drive.google.com/uc?id=1YourLogoRound80IdHere&export=download',
+            'LOGO_ROUND_120_URL': 'https://drive.google.com/uc?id=1YourLogoRound120IdHere&export=download',
+            'LOGO_ROUND_160_URL': 'https://drive.google.com/uc?id=1YourLogoRound160IdHere&export=download',
+            'LOGO_ROUND_200_URL': 'https://drive.google.com/uc?id=1YourLogoRound200IdHere&export=download',
+            'LOGO_ROUND_240_URL': 'https://drive.google.com/uc?id=1YourLogoRound240IdHere&export=download',
+            
+            // LOGOS - LIGHT LOGOTYPE
+            'LOGO_TYPE_LIGHT_560_URL': 'https://drive.google.com/uc?id=1YourLogoTypeLightIdHere&export=download',
+            'LOGO_TYPE_LIGHT_800_URL': 'https://drive.google.com/uc?id=1YourLogoTypeLightIdHere&export=download',
+            
+            // LOGOS - DARK LOGOTYPE
+            'LOGO_TYPE_DARK_560_URL': 'https://drive.google.com/uc?id=1YourLogoTypeDarkIdHere&export=download',
+            'LOGO_TYPE_DARK_800_URL': 'https://drive.google.com/uc?id=1YourLogoTypeDarkIdHere&export=download',
+        };
+
+        // Image status tracking
+        const imageStatus = {};
+        
+        // Initialize all images as unchecked
+        Object.keys(imageConstants).forEach(key => {
+            imageStatus[key] = 'unchecked';
+        });
+
+        /**
+         * Render the image grid
+         */
+        function renderGrid() {
+            const grid = document.getElementById('imageGrid');
+            const showUrlsOnly = document.getElementById('showUrlsOnly').checked;
+            
+            grid.innerHTML = '';
+            
+            Object.entries(imageConstants).forEach(([constantName, url]) => {
+                const status = imageStatus[constantName];
+                
+                const card = document.createElement('div');
+                card.className = `image-card ${status}`;
+                card.id = `card-${constantName}`;
+                
+                if (showUrlsOnly) {
+                    card.innerHTML = `
+                        <div class="image-info">
+                            <div class="constant-name">${constantName}</div>
+                            <div class="url-field">${escapeHtml(url)}</div>
+                            <button class="copy-button" onclick="copyToClipboard('${constantName}')">Copy URL</button>
+                        </div>
+                    `;
+                } else {
+                    const statusBadge = getStatusBadge(status);
+                    const errorMessage = status === 'error' ? `<div class="error-message" id="error-${constantName}">Error loading image</div>` : '';
+                    
+                    card.innerHTML = `
+                        <div class="image-preview ${status === 'loading' ? 'loading' : ''}" id="preview-${constantName}">
+                            ${status !== 'loading' ? `<img src="${url}" onerror="handleImageError('${constantName}')" onload="handleImageLoad('${constantName}')" alt="${constantName}">` : ''}
+                        </div>
+                        <div class="image-info">
+                            <div class="constant-name">${constantName}</div>
+                            <div style="margin-bottom: 10px;">${statusBadge}</div>
+                            <div class="url-field">${escapeHtml(url)}</div>
+                            <button class="copy-button" onclick="copyToClipboard('${constantName}')">Copy URL</button>
+                            ${errorMessage}
+                        </div>
+                    `;
+                }
+                
+                grid.appendChild(card);
+            });
+            
+            updateSummary();
+        }
+
+        /**
+         * Get HTML for status badge
+         */
+        function getStatusBadge(status) {
+            const badges = {
+                'ok': '<span class="status-badge ok">✓ Loading</span>',
+                'error': '<span class="status-badge error">✗ Failed</span>',
+                'loading': '<span class="status-badge loading">⟳ Testing</span>',
+                'unchecked': '<span class="status-badge notchecked">— Not Tested</span>'
+            };
+            return badges[status] || badges.unchecked;
+        }
+
+        /**
+         * Handle image load success
+         */
+        function handleImageLoad(constantName) {
+            imageStatus[constantName] = 'ok';
+            updateCard(constantName);
+        }
+
+        /**
+         * Handle image load error
+         */
+        function handleImageError(constantName) {
+            imageStatus[constantName] = 'error';
+            updateCard(constantName);
+        }
+
+        /**
+         * Update a single card
+         */
+        function updateCard(constantName) {
+            const card = document.getElementById(`card-${constantName}`);
+            if (!card) return;
+            
+            const status = imageStatus[constantName];
+            card.className = `image-card ${status}`;
+            
+            const statusBadgeArea = card.querySelector('[class*="status-badge"]');
+            if (statusBadgeArea) {
+                statusBadgeArea.parentElement.innerHTML = getStatusBadge(status);
+            }
+            
+            updateSummary();
+        }
+
+        /**
+         * Update summary counts
+         */
+        function updateSummary() {
+            const counts = {
+                ok: 0,
+                error: 0,
+                loading: 0,
+                unchecked: 0
+            };
+            
+            Object.values(imageStatus).forEach(status => {
+                if (counts.hasOwnProperty(status)) {
+                    counts[status]++;
+                }
+            });
+            
+            document.getElementById('countWorking').textContent = counts.ok;
+            document.getElementById('countBroken').textContent = counts.error;
+            document.getElementById('countLoading').textContent = counts.loading;
+        }
+
+        /**
+         * Test all images by setting status to loading and letting onload/onerror handle it
+         */
+        function testAllImages() {
+            // Reset all to loading
+            Object.keys(imageConstants).forEach(key => {
+                imageStatus[key] = 'loading';
+            });
+            
+            renderGrid();
+            
+            // The actual loading happens via img onerror/onload events
+            // Just trigger a re-render to show the loading state
+            console.log('Testing all images...');
+        }
+
+        /**
+         * Toggle URL-only view
+         */
+        function toggleUrlsOnly() {
+            renderGrid();
+        }
+
+        /**
+         * Copy URL to clipboard
+         */
+        function copyToClipboard(constantName) {
+            const url = imageConstants[constantName];
+            navigator.clipboard.writeText(url).then(() => {
+                alert('Copied: ' + constantName);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        /**
+         * Escape HTML special characters
+         */
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        /**
+         * Initialize page
+         */
+        window.addEventListener('load', () => {
+            renderGrid();
+            
+            // Get actual URLs from Config.gs
+            console.log('To populate this diagnostic with real URLs from Config.gs:');
+            console.log('1. Open Config.gs in your Apps Script project');
+            console.log('2. Find all constants like LOGO_ROUND_80_URL, FAVICON_URL, etc.');
+            console.log('3. Copy their values and update the imageConstants object in this HTML');
+            console.log('4. Refresh this page');
+        });
+
+        // Add a note about how to populate with real data
+        document.addEventListener('DOMContentLoaded', () => {
+            const note = document.createElement('div');
+            note.style.cssText = 'background:#FFF3E0; border:2px solid #E65100; padding:15px; border-radius:4px; margin-bottom:20px; color:#E65100;';
+            note.innerHTML = `
+                <strong>⚠ Action Required:</strong> 
+                This page shows placeholder URLs. To test your actual Config.gs URLs:
+                <ol style="margin-top:10px; margin-left:20px;">
+                    <li>Open <strong>Config.gs</strong> in your Apps Script project</li>
+                    <li>Find all image URL constants (FAVICON_URL, LOGO_ROUND_80_URL, etc.)</li>
+                    <li>Copy each URL value</li>
+                    <li>In this HTML file, update the <code>imageConstants</code> object with real values</li>
+                    <li>Refresh this page and click "Test All Images"</li>
+                </ol>
+            `;
+            document.querySelector('.container').insertBefore(note, document.querySelector('h1').nextElementSibling.nextElementSibling);
+        });
+    </script>
+</body>
+</html>
