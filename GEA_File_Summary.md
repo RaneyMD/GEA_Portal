@@ -19,9 +19,14 @@
 **Google Drive Folder IDs**
 - FOLDER_PHOTOS_PENDING, FOLDER_PHOTOS_APPROVED, FOLDER_DOCUMENTS, FOLDER_MEMBERSHIP_APPLICATIONS, FOLDER_BRAND_ASSETS, FOLDER_PAYMENT_CONFIRMATIONS, FOLDER_PASSPORT_SCANS
 
-**Brand & Logo URLs**
+**Brand & Logo URLs** (Google Cloud Storage public bucket: gea-public-assets)
 - COLOR_OLD_GLORY_BLUE (#0A3161), COLOR_OLD_GLORY_RED (#B31942), etc.
-- LOGO_ROUND_*, LOGO_TYPE_LIGHT_*, LOGO_TYPE_DARK_*, FAVICON_URL
+- LOGO_ROUND_* (80, 120, 160, 200, 240 px sizes) — GCS URLs for email/card/web use
+- LOGO_TYPE_LIGHT_* (560, 800, 1120 px) — Light variant for white/light backgrounds
+- LOGO_TYPE_DARK_* (560, 800, 1120 px) — Dark variant for dark backgrounds
+- FAVICON_URL — 32px favicon for browser tab
+- **Format**: https://storage.googleapis.com/gea-public-assets/gea-logo-*.png
+- **Note**: Files in gea-public-assets bucket are public (allUsers has Storage Object Viewer role)
 
 **Email Addresses**
 - EMAIL_CHAIR, EMAIL_TREASURER, EMAIL_SECRETARY, EMAIL_BOARD, EMAIL_MEMBERS, EMAIL_RSO, EMAIL_MGT, EMAIL_LEGACY
@@ -114,6 +119,8 @@
 - `_handleLogout(p)` — Invalidates session token.
 - `serve` — Returns Portal.html (member interface)
 - `serve_admin` — Returns Admin.html (board interface)
+- `image_diagnostic` — Returns diagnostic page showing all image assets from Config.gs
+- `img` (with `id` param) — Image proxy handler. Returns Google Drive file as binary image response.
 
 **Member Routes (valid token required)**
 - `_handleDashboard(p)` — Dashboard data: member info, household members, upcoming reservations, membership status
@@ -123,7 +130,7 @@
 - `_handleCancel(p)` — Cancel a reservation. Verifies ownership.
 - `_handleCard(p)` — Digital membership card data for all household members
 - `_handlePaymentSubmit(p)` — Submit payment confirmation. Stores payment record, notifies board.
-- `_handleUpdatePhoneNumbers(p)` — Update primary/secondary phone numbers with country codes. NEW: Processes intl-tel-input data.
+- `_handleUpdatePhoneNumbers(p)` — Update primary/secondary phone numbers with country codes. Processes intl-tel-input data.
 
 **Board Routes (board role required)**
 - `_handleAdminPending(p)` — List all pending reservations awaiting board approval
@@ -137,12 +144,18 @@
 - `_confirmPayment(paymentId, verifiedBy)` — Mark payment verified. Activates household. Sets expiration date.
 - `_markPaymentNotFound(paymentId, markedBy)` — Mark payment as not found in account.
 
+**Image Handling**
+- `_handleImageDiagnostic(params)` — Serves HTML diagnostic page with live image loading tests. Tests all LOGO_* and FAVICON URLs from Config.gs.
+- `_handleImageProxy(p)` — Proxies Google Drive files as binary image responses. Allows embedding Drive images in iframes without hotlink issues. Usage: `?action=img&id=<DRIVE_FILE_ID>`
+- `getImageConstants()` — Collects all image URL constants for diagnostic page
+
 **Helper Functions**
 - `_routeAction(action, params)` — Routes action strings to handler functions
 - `_setupTestPasswords()` — TEMPORARY: Sets initial test passwords. DELETE AFTER INITIAL ACTIVATION.
 - `_getMemberUpcomingReservations(householdId)` — Returns reservations >= today (not cancelled)
 - `_getMemberAllReservations(householdId)` — Returns all reservations, sorted newest first
 - `_safePublicHousehold(hh)` — Returns subset of household fields safe to send to browser
+- `_mimeTypeEnumFromContentType_(contentType)` — Maps content-type string to ContentService.MimeType enum
 
 ---
 
@@ -542,7 +555,7 @@
 | File | Purpose | Key Functions |
 |------|---------|----------------|
 | **Config.gs** | All constants & settings | 200+ constants (IDs, colors, limits, messages) |
-| **Code.gs** | Web app routing & entry point | doGet(), 13 route handlers, _handleLogin, _handleBook, etc. |
+| **Code.gs** | Web app routing & entry point | doGet(), image proxy, diagnostic page, 13 route handlers (_handleLogin, _handleBook, _handleImageProxy, etc.) |
 | **AuthService.gs** | Login, sessions, roles | login(), validateSession(), requireAuth(), _createSession() |
 | **MemberService.gs** | Member data CRUD | getMemberByEmail(), getHouseholdMembers(), createMemberRecord(), checkBirthdays(), checkExpiringMemberships() |
 | **ReservationService.gs** | Reservations & limits | createReservation(), approveReservation(), getTennisHoursThisWeek(), checkReservationLimits(), sendRsoDailySummary() |

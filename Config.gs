@@ -92,37 +92,32 @@ var FOLDER_PASSPORT_SCANS           = "1uNDYDRLo_NpHTgNMvdiobuni5Jm_6kk8";
 
 
 // ============================================================
-// SECTION 4: LOGO AND BRAND ASSET URLs
+// SECTION 4: LOGO AND BRAND ASSET OBJECT PATHS (GCS)
 // ============================================================
-// Direct links to logo files stored in Google Drive.
-// Format: https://drive.google.com/uc?export=view&id=FILE_ID
-//
-// TO GET FILE ID:
-// Right-click file in Drive → Share → Copy link
-// Extract the ID from: /d/[ID HERE]/view
-//
-// NOTE: Files must be shared as "Anyone with link can view"
+// Google Cloud Storage public bucket: gea-public-assets
+// Format: https://storage.googleapis.com/gea-public-assets/[object-name]
+// All images publicly readable (allUsers has Storage Object Viewer role)
 // ============================================================
 
-// Round logo (used in emails and membership cards)
-var LOGO_ROUND_80_URL     = "https://drive.google.com/uc?export=view&id=1t56YALo84jKVnYI02lCs6CT3_jE0Yakf";     // 80px - email header
-var LOGO_ROUND_120_URL    = "https://drive.google.com/uc?export=view&id=1BI6PAV4_cMNdn-eSB2NX4roSiiKlwBn0";    // 120px - membership card
-var LOGO_ROUND_160_URL    = "https://drive.google.com/uc?export=view&id=1AbEGPU9Nb-QO6GGYIVCSQGlDakL6J8Tb";    // 160px - retina email
-var LOGO_ROUND_200_URL    = "https://drive.google.com/uc?export=view&id=1wGnQy-jGHqHrUiqABvtCbB-37cTRJms2";    // 200px - website
-var LOGO_ROUND_240_URL    = "https://drive.google.com/uc?export=view&id=18h23LEMsXtajiwD9BuZuiX5ELArT3yBh";    // 240px - retina card
+// Favicon - displayed in browser tab
+var FAVICON_URL = "https://storage.googleapis.com/gea-public-assets/gea-logo-round-32.png";
 
-// Logotype - light version (dark text, for white/light backgrounds)
-var LOGO_TYPE_LIGHT_560_URL  = "https://drive.google.com/uc?export=view&id=1_iKvmRPKg79wi3fHeHkfn0UKQhp4IQE7";  // email
-var LOGO_TYPE_LIGHT_800_URL  = "https://drive.google.com/uc?export=view&id=1fZHhjH9qWpfcPWpg17me53Td0lt9TvMZ";  // website/print
-var LOGO_TYPE_LIGHT_1120_URL = "https://drive.google.com/uc?export=view&id=1seQiLgTrFZUdv6pHTD1YCtO67OlloEkR"; // retina email
+// Logos - Round (used in headers, cards, email)
+var LOGO_ROUND_80_URL = "https://storage.googleapis.com/gea-public-assets/gea-logo-round-80.png";     // 80px - email header
+var LOGO_ROUND_120_URL = "https://storage.googleapis.com/gea-public-assets/gea-logo-round-120.png";   // 120px - membership card
+var LOGO_ROUND_160_URL = "https://storage.googleapis.com/gea-public-assets/gea-logo-round-160.png";   // 160px - retina email
+var LOGO_ROUND_200_URL = "https://storage.googleapis.com/gea-public-assets/gea-logo-round-200.png";   // 200px - website
+var LOGO_ROUND_240_URL = "https://storage.googleapis.com/gea-public-assets/gea-logo-round-240.png";   // 240px - retina card
 
-// Logotype - dark version (white text, for dark backgrounds)
-var LOGO_TYPE_DARK_560_URL   = "https://drive.google.com/uc?export=view&id=1nJ_NhfSjmim0BhlzHF90xk5_KXsZuoWx";   // dark backgrounds
-var LOGO_TYPE_DARK_800_URL   = "https://drive.google.com/uc?export=view&id=1DuUl2nbQtsFP1iPbp0KWyYTP3Yb4GKww";   // website header
-var LOGO_TYPE_DARK_1120_URL  = "https://drive.google.com/uc?export=view&id=1C_yW33TX3ZygsPnaJEicyN_dGdmTTJEs";  // dark retina
+// Logotype - Light version (dark text, for white/light backgrounds)
+var LOGO_TYPE_LIGHT_560_URL = "https://storage.googleapis.com/gea-public-assets/gea-logotype-light-560.png";   // email
+var LOGO_TYPE_LIGHT_800_URL = "https://storage.googleapis.com/gea-public-assets/gea-logotype-light-800.png";   // website/print
+var LOGO_TYPE_LIGHT_1120_URL = "https://storage.googleapis.com/gea-public-assets/gea-logotype-light-1120.png"; // retina email
 
-// Favicon
-var FAVICON_URL = "https://drive.google.com/uc?export=view&id=1s30vYml-JNZK_8aoV6bPWRQc_wSz_BtU";  // 32px browser tab
+// Logotype - Dark version (white text, for dark backgrounds)
+var LOGO_TYPE_DARK_560_URL = "https://storage.googleapis.com/gea-public-assets/gea-logotype-dark-560.png";     // dark backgrounds
+var LOGO_TYPE_DARK_800_URL = "https://storage.googleapis.com/gea-public-assets/gea-logotype-dark-800.png";     // website header
+var LOGO_TYPE_DARK_1120_URL = "https://storage.googleapis.com/gea-public-assets/gea-logotype-dark-1120.png";   // dark retina
 
 
 // ============================================================
@@ -638,8 +633,8 @@ var HOUSEHOLD_PHONE_SYNC_MINUTE = 0;      // Runs at :00 minutes past the hour
 // ============================================================
 
 var SYSTEM_NAME             = "GEA Management System";
-var SYSTEM_VERSION          = "1.23.0";
-var SYSTEM_BUILD_DATE       = "2026-02-16";
+var SYSTEM_VERSION          = "1.31.0";
+var SYSTEM_BUILD_DATE       = "2026-02-21";
 var SYSTEM_DEVELOPER        = "Michael Raney, GEA Treasurer";
 var SYSTEM_CONTACT          = "treasurer@geabotswana.org";
 

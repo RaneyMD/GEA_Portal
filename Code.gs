@@ -57,13 +57,23 @@ function doGet(e) {
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
-  // Serve the Admin interface to board members
-  // auth happens inside Admin.html via the login form and token-based API calls)
+  // Serve the Admin interface
   if (action === "serve_admin") {
     return HtmlService.createHtmlOutputFromFile("Admin")
       .setTitle("GEA Admin Portal")
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
+
+  // Serve the image diagnostic page as HTML
+  if (action === "image_diagnostic") {
+    return _handleImageDiagnostic(params);
+  }
+ 
+   // Serve proxied Drive images as real image responses (binary)
+   // Usage: ?action=img&id=<DRIVE_FILE_ID>
+   if (action === "img") {
+     return _handleImageProxy(params);
+   }
 
   // All other actions return JSON
   var result;
@@ -71,7 +81,6 @@ function doGet(e) {
     result = _routeAction(action, params);
   } catch (err) {
     Logger.log("UNCAUGHT ERROR in doGet (action=" + action + "): " + err);
-    // Return the actual error message in the response
     return ContentService
       .createTextOutput(JSON.stringify({
         success: false,
@@ -80,6 +89,9 @@ function doGet(e) {
       }))
       .setMimeType(ContentService.MimeType.JSON);
   }
+
+  // If a handler accidentally returns an object, stringify it safely
+  if (typeof result !== "string") result = JSON.stringify(result);
 
   return ContentService
     .createTextOutput(result)
@@ -126,6 +138,106 @@ function _routeAction(action, params) {
       return errorResponse("Unknown action: " + action, "NOT_FOUND");
   }
 }
+
+
+
+ 
+  // ============================================================
+  // IMAGE PROXY (Drive -> WebApp)
+  // ============================================================
+  
+  /**
+   * HANDLER: _handleImageProxy
+   * PURPOSE: Return a Drive file as an image response so it can be embedded via <img src="...">
+   *          even inside a Google Sites iframe (avoids Drive hotlink/preview issues).
+   *
+   * USAGE:
+   *   ?action=img&id=<DRIVE_FILE_ID>
+   *
+   * SECURITY:
+   * - If these assets are intended to be public (logos/favicon), leaving it unauthenticated is ok.
+   * - If you ever proxy private images, require a token and enforce requireAuth() here.
+   *
+   * @param {Object} p
+   * @returns {ContentService.TextOutput}
+   */
+  function _handleImageProxy(p) {
+    if (!p || !p.id) {
+      return ContentService
+        .createTextOutput("Missing required parameter: id")
+        .setMimeType(ContentService.MimeType.TEXT);
+    }
+  
+    try {
+      var file = DriveApp.getFileById(String(p.id).trim());
+      var blob = file.getBlob();
+      var bytes = blob.getBytes(); // byte[]
+  
+      return ContentService
+        // Apps Script accepts byte[] here; it returns raw bytes with the selected mime type.
+        .createTextOutput(bytes)
+        .setMimeType(_mimeTypeEnumFromContentType_(blob.getContentType()));
+    } catch (e) {
+      Logger.log("ERROR _handleImageProxy (id=" + p.id + "): " + e);
+      return ContentService
+        .createTextOutput("Could not load image for id=" + p.id)
+        .setMimeType(ContentService.MimeType.TEXT);
+    }
+  }
+  
+  /**
+   * Maps a blob Content-Type string to a ContentService.MimeType enum.
+   * ContentService supports only a small set, so we collapse to PNG/JPEG/GIF.
+   */
+  function _mimeTypeEnumFromContentType_(contentType) {
+    var ct = String(contentType || "").toLowerCase();
+    if (ct.indexOf("jpeg") >= 0 || ct.indexOf("jpg") >= 0) return ContentService.MimeType.JPEG;
+    if (ct.indexOf("gif")  >= 0) return ContentService.MimeType.GIF;
+    // default/fallback (includes png, svg, webp, etc.)
+    return ContentService.MimeType.PNG;
+  }
+  
+  /**
+   * Extract a Drive fileId from common Drive URL formats.
+   * Supports:
+   * - https://drive.google.com/file/d/<ID>/view
+   * - https://drive.google.com/file/d/<ID>/preview
+   * - https://drive.google.com/open?id=<ID>
+   * - https://drive.google.com/uc?id=<ID>...
+   */
+  function _extractDriveFileId_(url) {
+    if (!url) return "";
+    var s = String(url);
+  
+    // /file/d/<ID>/
+    var m = s.match(/\/file\/d\/([a-zA-Z0-9_-]{10,})\//);
+    if (m && m[1]) return m[1];
+  
+    // ?id=<ID>
+    m = s.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+    if (m && m[1]) return m[1];
+  
+    return "";
+  }
+  
+  /**
+   * Convert a Drive URL (or fileId-like URL) into a proxied image URL on this webapp.
+   * If no Drive fileId is detected, returns the original URL unchanged.
+   */
+  function _toProxiedImageUrl_(url) {
+    var id = _extractDriveFileId_(url);
+    if (!id) return url;
+    var base = _getWebAppBaseUrl_();
+    return base + "?action=img&id=" + encodeURIComponent(id);
+  }
+  
+  /**
+   * Returns the deployed web app URL base for this script.
+   * NOTE: This returns a valid URL only when the script is deployed as a web app.
+   */
+  function _getWebAppBaseUrl_() {
+    return ScriptApp.getService().getUrl();
+  } 
 
 
 // ============================================================
@@ -991,6 +1103,7 @@ function _getMemberAllReservations(householdId) {
 /**
  * HANDLER: _handleImageDiagnostic
  * PURPOSE: Serve a live diagnostic page showing all image assets defined in Config.gs.
+ *          (These URLs should now point at Google Cloud Storage objects, not Google Drive.)
  *
  * WHAT IT DOES:
  * 1. Pulls all image URLs from Config.gs constants (logos, favicon, etc.)
@@ -1005,13 +1118,23 @@ function _getMemberAllReservations(householdId) {
  * @returns {HtmlOutput} Diagnostic page with live image tests
  */
 function _handleImageDiagnostic(params) {
+  // Original Config.gs URLs
+  var rawImageConstants = getImageConstants();
+
+  // For Drive-hosted assets, prefer proxied URLs so <img> loads reliably in Google Sites iframes
+  var imageConstants = {};
+  Object.keys(rawImageConstants).forEach(function(k) {
+    imageConstants[k] = _toProxiedImageUrl_(rawImageConstants[k]);
+  });
+ 
   var html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GEA Config.gs Image Diagnostic</title>
+    <title>GEA Image Diagnostic (Config.gs → GCS URLs)</title>
+
     <style>
         * {
             margin: 0;
@@ -1187,8 +1310,8 @@ function _handleImageDiagnostic(params) {
 </head>
 <body>
     <div class="container">
-        <h1>GEA Config.gs Image Diagnostic</h1>
-        <p class="subtitle">Live image test - URLs pulled directly from Config.gs</p>
+        <h1>GEA Image Diagnostic</h1>
+        <p class="subtitle">Live test — URLs pulled from Config.gs (expected: Google Cloud Storage object URLs)</p>
         
         <div class="summary">
             <div class="summary-item working" id="workingCount">
@@ -1208,7 +1331,7 @@ function _handleImageDiagnostic(params) {
 
     <script>
         // Image constants pulled from Code.gs
-        const imageConstants = ` + JSON.stringify(getImageConstants()) + `;
+        const imageConstants = ${JSON.stringify(imageConstants)};
         
         // Track status
         const imageStatus = {};
@@ -1299,16 +1422,25 @@ function _handleImageDiagnostic(params) {
   `;
 
   return HtmlService.createHtmlOutput(html)
-    .setTitle("GEA Image Diagnostic")
+    .setTitle("GEA Image Diagnostic (GCS)")
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
+
 /**
  * HELPER: getImageConstants
- * PURPOSE: Collect all image URL constants from Config.gs into a single object.
+ * PURPOSE: Collect all image URL constants from Config.gs.
  *
- * RETURNS: Object with constant names as keys and their URL values.
- * Used by _handleImageDiagnostic to populate the diagnostic page.
+ * DETAILS:
+ * - These constants are public HTTPS URLs pointing to Google Cloud Storage.
+ * - The gea-public-assets bucket is publicly readable (allUsers has Storage Object Viewer role).
+ * - No authentication or signed URLs required.
+ *
+ * RETURNS:
+ *   Object<string,string> mapping constant name -> HTTPS URL
+ *
+ * Used by:
+ *   - _handleImageDiagnostic() to display all configured image assets and test loading.
  */
 function getImageConstants() {
   return {
@@ -1320,10 +1452,13 @@ function getImageConstants() {
     'LOGO_ROUND_240_URL': LOGO_ROUND_240_URL,
     'LOGO_TYPE_LIGHT_560_URL': LOGO_TYPE_LIGHT_560_URL,
     'LOGO_TYPE_LIGHT_800_URL': LOGO_TYPE_LIGHT_800_URL,
+    'LOGO_TYPE_LIGHT_1120_URL': LOGO_TYPE_LIGHT_1120_URL,
     'LOGO_TYPE_DARK_560_URL': LOGO_TYPE_DARK_560_URL,
-    'LOGO_TYPE_DARK_800_URL': LOGO_TYPE_DARK_800_URL
+    'LOGO_TYPE_DARK_800_URL': LOGO_TYPE_DARK_800_URL,
+    'LOGO_TYPE_DARK_1120_URL': LOGO_TYPE_DARK_1120_URL
   };
 }
+
 
 /**
  * Returns a subset of household fields safe to send to the browser.

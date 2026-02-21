@@ -579,4 +579,48 @@ Access control is managed via Google Drive permissions and Apps Script authentic
 
 ---
 
+## 10. IMAGE STORAGE & SERVING
+
+### Public Assets — Google Cloud Storage
+
+**Bucket**: `gea-public-assets` (public-readable, no authentication required)
+
+All logo and favicon assets are served from GCS for performance and reliability:
+- `gea-logo-round-*.png` — 32, 80, 120, 160, 200, 240 px (circular logo)
+- `gea-logotype-light-*.png` — 560, 800, 1120 px (light variant for light backgrounds)
+- `gea-logotype-dark-*.png` — 560, 800, 1120 px (dark variant for dark backgrounds)
+
+**URLs stored in**: Config.gs constants (LOGO_*, FAVICON_URL)
+- Format: `https://storage.googleapis.com/gea-public-assets/gea-logo-round-80.png`
+- Access: No signed URLs, no authentication (public bucket with allUsers → Storage Object Viewer role)
+
+### Member Photos & Documents — Google Drive
+
+Private files (member photos, passport scans, employment verification) stored in Drive folders:
+- `FOLDER_PHOTOS_PENDING` — Pending photo submissions
+- `FOLDER_PHOTOS_APPROVED` — Approved photos
+- `FOLDER_DOCUMENTS` — Member documents (passports, IDs)
+- `FOLDER_PASSPORT_SCANS` — Scanned passport copies
+- `FOLDER_MEMBERSHIP_APPLICATIONS` — Application documents
+- `FOLDER_PAYMENT_CONFIRMATIONS` — Payment receipts
+- `FOLDER_BRAND_ASSETS` — Marketing materials (internal use only)
+
+### Image Proxy Handler
+
+The Apps Script includes an image proxy to serve Google Drive files directly as binary image responses:
+- **Route**: `?action=img&id=<DRIVE_FILE_ID>`
+- **Purpose**: Allows embedding Drive files in iframes without hotlink/preview restrictions
+- **Security**: Currently unauthenticated (for public logos). If future use cases require private images, add `requireAuth()` check.
+- **Implementation**: Fetches Drive file blob, returns with appropriate MIME type (JPEG/PNG/GIF)
+
+### Image Diagnostic Page
+
+Utility page for testing image asset availability:
+- **Route**: `?action=image_diagnostic`
+- **Purpose**: Live test of all LOGO_* and FAVICON_URL constants
+- **Display**: Grid showing which images load successfully (✓) vs fail (✗)
+- **Used for**: Debugging broken image URLs, verifying GCS bucket access, checking logo variants
+
+---
+
 **End of Schema Document**
